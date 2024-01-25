@@ -7,6 +7,11 @@
 To get started, install the Bun runtime: https://bun.sh/
 
 ### Development
+Install modules:
+```bash
+bun i
+```
+
 To start the development server run:
 ```bash
 bun run dev

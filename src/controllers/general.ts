@@ -1,8 +1,14 @@
 import { Elysia } from "elysia";
 
-export const generalController = new Elysia({});
+export const generalController = new Elysia();
 
 // TODO
-generalController.get("/status", () => "OK", { detail: { tags: ["General"] } });
+generalController.get("/status",
+    () => getStatus(),
+    { detail: { tags: ["General"] } }
+);
 
 
+function getStatus() {
+    return "Ok";
+}
