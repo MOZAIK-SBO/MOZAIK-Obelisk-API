@@ -1,19 +1,25 @@
 import { Elysia, t } from "elysia";
+import { obeliskModel } from "../models/obelisk.model";
 
-export const obeliskController = new Elysia({ prefix: "/obelisk" });
+export const obeliskController = new Elysia({ prefix: "/obelisk" })
+    .use(obeliskModel);
 
-obeliskController.post("/ingest/:id",
-    ({ params: { id } }) => ingestData(id),
+// TODO: something with key management?
+obeliskController.post("/ingest/:datasetId",
+    ({ params: { datasetId }, query, body }) => {
+        // TODO
+        return { datasetId, query, body };
+    },
     {
         params: t.Object({
-            id: t.Numeric()
+            datasetId: t.String()
         }),
+        query: t.Object({
+            timestampPrecision: t.Optional(t.String({ pattern: "milliseconds|microseconds|seconds" })),
+            mode: t.Optional(t.String({ pattern: "default|stream_only|store_only" })),
+        }),
+        body: "IngestBatch",
         detail: { tags: ["Obelisk"] }
     }
 );
 
-
-
-function ingestData(id: number) {
-    return `ingestData: ${id}`;
-}

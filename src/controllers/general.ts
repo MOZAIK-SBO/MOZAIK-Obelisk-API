@@ -2,13 +2,7 @@ import { Elysia } from "elysia";
 
 export const generalController = new Elysia();
 
-// TODO
-generalController.get("/status",
-    () => getStatus(),
+generalController.get("/health",
+    () => { return { timestamp: Date.now(), status: "healthy" } },
     { detail: { tags: ["General"] } }
 );
-
-
-function getStatus() {
-    return "Ok";
-}
