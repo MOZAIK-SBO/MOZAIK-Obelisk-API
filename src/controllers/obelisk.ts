@@ -7,7 +7,7 @@ export const obeliskController = new Elysia({ prefix: "/obelisk" })
 // TODO: something with key management?
 obeliskController.post("/ingest/:datasetId",
     ({ params: { datasetId }, query, body }) => {
-        // TODO
+        // TODO: forward to Obelisk, maybe auth check?
         return { datasetId, query, body };
     },
     {
