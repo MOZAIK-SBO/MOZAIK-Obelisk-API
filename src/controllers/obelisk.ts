@@ -4,19 +4,27 @@ import { obeliskModel } from "../models/obelisk.model";
 export const obeliskController = new Elysia({ prefix: "/obelisk" })
     .use(obeliskModel);
 
-// TODO: something with key management?
 obeliskController.post("/ingest/:datasetId",
-    ({ params: { datasetId }, query, body }) => {
-        // TODO: forward to Obelisk, maybe auth check?
-        return { datasetId, query, body };
+    async ({ params: { datasetId }, query: { timestampPrecision, mode }, headers, body }) => {
+        return await fetch(
+            `${process.env.OBELISK_ENDPOINT}/data/ingest/${datasetId}?timestampPrecision=${timestampPrecision}&mode=${mode}`,
+            {
+                method: "POST",
+                body: JSON.stringify(body),
+                headers: { "authorization": headers.authorization }
+            }
+        );
     },
     {
         params: t.Object({
             datasetId: t.String()
         }),
         query: t.Object({
-            timestampPrecision: t.Optional(t.String({ pattern: "milliseconds|microseconds|seconds" })),
-            mode: t.Optional(t.String({ pattern: "default|stream_only|store_only" })),
+            timestampPrecision: t.Optional(t.String({ pattern: "^(milliseconds|microseconds|seconds)$", default: "milliseconds" })),
+            mode: t.String({ pattern: "^(default|stream_only|store_only)$", default: "default" }),
+        }),
+        headers: t.Object({
+            authorization: t.String()
         }),
         body: "IngestBatch",
         detail: { tags: ["Obelisk"] }

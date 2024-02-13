@@ -2,13 +2,13 @@ import { Elysia, t } from "elysia";
 
 const IngestBatch =
     t.Array(t.Object({
-        timestamp: t.MaybeEmpty(t.Numeric()),
+        timestamp: t.Optional(t.Numeric()),
         metric: t.String(),
         value: t.Any(),
-        source: t.MaybeEmpty(t.String()),
-        tags: t.MaybeEmpty(t.Array(t.String())),
-        location: t.MaybeEmpty(t.Object({ lat: t.Numeric(), lng: t.Numeric() })),
-        elevation: t.MaybeEmpty(t.Numeric())
+        source: t.Optional(t.String()),
+        tags: t.Optional(t.Array(t.String())),
+        location: t.Optional(t.Object({ lat: t.Numeric(), lng: t.Numeric() })),
+        elevation: t.Optional(t.Numeric())
     }));
 
 
