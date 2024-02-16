@@ -1,19 +1,101 @@
 import { Elysia, t } from "elysia";
 
-const IngestBatch =
-    t.Array(t.Object({
+
+export const timestampUnion = t.Union([
+    t.Literal("milliseconds", { description: "milliseconds" }),
+    t.Literal("microseconds", { description: "microseconds" }),
+    t.Literal("seconds", { description: "seconds" })
+],
+    { default: "milliseconds" }
+);
+
+export const fieldsUnion = t.Union([
+    t.Literal("timestamp", { description: "timestamp" }),
+    t.Literal("dataset", { description: "dataset" }),
+    t.Literal("metric", { description: "metric" }),
+    t.Literal("producer", { description: "producer" }),
+    t.Literal("source", { description: "source" }),
+    t.Literal("value", { description: "value" }),
+    t.Literal("tags", { description: "tags" }),
+    t.Literal("location", { description: "location" }),
+    t.Literal("geohash", { description: "geohash" }),
+    t.Literal("elevation", { description: "elevation" }),
+    t.Literal("tsReceived", { description: "tsReceived" })
+]);
+
+export const MetricEvent = t.Object({
+    timestamp: t.Number(),
+    dataset: t.Optional(t.String()),
+    metric: t.Optional(t.String()),
+    value: t.Optional(t.Any()),
+    producer: t.Optional(t.Object({
+        userId: t.String(),
+        clientId: t.String()
+    })),
+    source: t.Optional(t.String()),
+    tags: t.Optional(t.Array(t.String())),
+    location: t.Optional(t.Object({ lat: t.Number(), lng: t.Number() })),
+    geohash: t.Optional(t.String()),
+    elevation: t.Optional(t.Number()),
+    tsReceived: t.Optional(t.Number())
+});
+
+export const EventsQueryResult = t.Object({
+    items: t.Array(MetricEvent),
+    cursor: t.Optional(t.String())
+});
+
+
+const IngestBatch = t.Array(
+    t.Object({
         timestamp: t.Optional(t.Numeric()),
         metric: t.String(),
-        value: t.Any(),
+        value: t.Object({
+            ct: t.Array(t.Numeric())
+        }),
         source: t.Optional(t.String()),
         tags: t.Optional(t.Array(t.String())),
         location: t.Optional(t.Object({ lat: t.Numeric(), lng: t.Numeric() })),
         elevation: t.Optional(t.Numeric())
-    }));
+    })
+);
 
+
+const EventsQuery = t.Object({
+    dataRange: t.Object({
+        datasets: t.Array(t.String()),
+        metrics: t.Optional(t.Array(t.String()))
+    }),
+    timestampPrecision: t.Optional(timestampUnion),
+    fields: t.Optional(t.Array(fieldsUnion,
+        { default: ["timestamp", "metric", "value"] }
+    )),
+    from: t.Optional(t.Numeric()),
+    to: t.Optional(t.Numeric()),
+    orderBy: t.Optional(t.Object({
+        fields: t.Array(fieldsUnion, { default: ["timestamp"] }),
+        ordering: t.Optional(
+            t.Union([
+                t.Literal("asc", { description: "asc" }),
+                t.Literal("desc", { description: "desc" })
+            ],
+                { default: "asc" }
+            )
+        )
+    })),
+    filter: t.Optional(t.Any(
+        { description: "All filter options: https://obelisk.docs.apiary.io/#/data-structures/0/filter-expression" }
+    )),
+    limitBy: t.Optional(t.Object({
+        fields: t.Array(fieldsUnion, { default: ["timestamp"] }),
+        limit: t.Numeric()
+    })),
+    cursor: t.Optional(t.String())
+});
 
 
 export const obeliskModel = new Elysia({ name: "obeliskModel" })
     .model({
-        IngestBatch: IngestBatch
+        IngestBatch,
+        EventsQuery
     });

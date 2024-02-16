@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { obeliskModel } from "../models/obelisk.model";
+import { EventsQueryResult, obeliskModel, timestampUnion } from "../models/obelisk.model";
 
 export const obeliskController = new Elysia({ prefix: "/obelisk" })
     .use(obeliskModel);
@@ -14,20 +14,51 @@ obeliskController.post("/ingest/:datasetId",
                 headers: { "authorization": headers.authorization }
             }
         );
+    }, {
+    params: t.Object({
+        datasetId: t.String()
+    }),
+    query: t.Object({
+        timestampPrecision: t.Optional(timestampUnion),
+        mode: t.Optional(t.Union([
+            t.Literal("default"),
+            t.Literal("stream_only"),
+            t.Literal("store_only")
+        ],
+            { default: "default" }
+        ))
+    }),
+    headers: t.Object({
+        authorization: t.String()
+    }),
+    body: "IngestBatch",
+    response: {
+        204: t.Undefined(),
+        500: t.Any()
     },
-    {
-        params: t.Object({
-            datasetId: t.String()
-        }),
-        query: t.Object({
-            timestampPrecision: t.Optional(t.String({ pattern: "^(milliseconds|microseconds|seconds)$", default: "milliseconds" })),
-            mode: t.String({ pattern: "^(default|stream_only|store_only)$", default: "default" }),
-        }),
-        headers: t.Object({
-            authorization: t.String()
-        }),
-        body: "IngestBatch",
-        detail: { tags: ["Obelisk"] }
-    }
-);
+    detail: { tags: ["Obelisk"] }
+});
+
+
+obeliskController.post("/query/events",
+    async ({ headers, body }) => {
+        return await fetch(
+            `${process.env.OBELISK_ENDPOINT}/data/query/events`,
+            {
+                method: "POST",
+                body: JSON.stringify(body),
+                headers: { "authorization": headers.authorization }
+            }
+        );
+    }, {
+    headers: t.Object({
+        authorization: t.String()
+    }),
+    body: "EventsQuery",
+    response: {
+        200: EventsQueryResult,
+        500: t.Any()
+    },
+    detail: { tags: ["Obelisk"] }
+});
 
