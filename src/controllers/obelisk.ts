@@ -40,7 +40,7 @@ obeliskController.post("/ingest/:datasetId",
 });
 
 
-obeliskController.post("/query/events",
+obeliskController.post("/query",
     async ({ headers, body }) => {
         return await fetch(
             `${process.env.OBELISK_ENDPOINT}/data/query/events`,
