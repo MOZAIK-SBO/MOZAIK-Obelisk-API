@@ -26,8 +26,8 @@ export function initSwagger(app: Elysia) {
             tags: [
                 { name: "General", description: "General API endpoints." },
                 { name: "Obelisk", description: "Store data in Obelisk." },
-                { name: "MPC", description: "Request computation." },
-                { name: "Key store", description: "Store keys in the key store." }
+                { name: "Analysis", description: "Request computation." },
+                { name: "Keys", description: "Store keys in the key store." }
             ]
         },
         exclude: [

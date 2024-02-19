@@ -7,10 +7,15 @@
     "start": "bun run src/index.ts"
   },
   "dependencies": {
+    "@elysiajs/bearer": "^0.8.0",
     "@elysiajs/swagger": "^0.8.5",
-    "elysia": "latest"
+    "elysia": "latest",
+    "jsonwebtoken": "^9.0.2",
+    "redis": "^4.6.13",
+    "redis-om": "^0.4.3"
   },
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.5",
     "bun-types": "latest"
   },
   "module": "src/index.js"
