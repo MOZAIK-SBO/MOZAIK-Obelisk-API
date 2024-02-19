@@ -29,7 +29,7 @@ obeliskController.post("/ingest/:datasetId",
         ))
     }),
     headers: t.Object({
-        authorization: t.String()
+        authorization: t.String({ description: "JWT Bearer token." })
     }),
     body: "IngestBatch",
     response: {
@@ -52,7 +52,7 @@ obeliskController.post("/query",
         );
     }, {
     headers: t.Object({
-        authorization: t.String()
+        authorization: t.String({ description: "JWT Bearer token." })
     }),
     body: "EventsQuery",
     response: {
