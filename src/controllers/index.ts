@@ -3,6 +3,7 @@ import { obeliskController } from "./obelisk";
 import { generalController } from "./general";
 import { initSwagger } from "./swagger";
 import { keysController } from "./keys";
+import { analysisController } from "./analysis ";
 
 export function initControllers(app: Elysia) {
     initSwagger(app);
@@ -10,4 +11,5 @@ export function initControllers(app: Elysia) {
     app.use(obeliskController);
     app.use(generalController);
     app.use(keysController);
+    app.use(analysisController);
 }
