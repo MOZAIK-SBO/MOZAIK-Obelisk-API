@@ -37,68 +37,73 @@ export const analysisController = new Elysia({ prefix: "/analysis" })
 
 
 analysisController.post("/prepare", async ({ body, jwtDecoded }) => {
-    const currentTime = Date.now();
-    const expAt = new Date(currentTime + body.expHours * 60 * 60 * 1000);
+    // Make sure all the MPC parties are registered in MOZAIK
+    body.parties.forEach(async party => {
+        const registeredParty = await mpcPartyRepository
+            .search()
+            .where("mpc_id").equals(party.mpc_id).return.first();
 
-    const analysisEntity = await analysisSchemaRepository.save({
-        userId: jwtDecoded.client_id,
-        userPk: body.userPk,
-        sourceDataset: body.data.source,
-        resultDataset: body.data.result,
-        fromTimestamp: body.data.from,
-        toTimestamp: body.data.to,
-        parties: body.mpcParties.map((party) => party.mpcId),
-        analysisType: body.analysisType,
-        createdAt: currentTime,
-        keysExpAt: expAt.getTime()
+        if (registeredParty == null) {
+            throw "One or more of the provided MPC parties are not registered in MOZAIK.";
+        }
     });
 
-    body.mpcParties.forEach(async party => {
+    const currentTime = Date.now();
+    const expAt = new Date(currentTime + body.exp_hours * 60 * 60 * 1000);
+
+    const analysisEntity = await analysisSchemaRepository.save({
+        user_id: jwtDecoded.client_id,
+        user_key: body.user_key,
+        source_dataset: body.data.source,
+        result_dataset: body.data.result,
+        data_index: body.data.index,
+        parties: body.parties.map((party) => party.mpc_id),
+        analysis_type: body.analysis_type,
+        created_at: currentTime,
+        keys_exp_at: expAt.getTime()
+    });
+
+    body.parties.forEach(async party => {
+        const registeredParty = (await mpcPartyRepository
+            .search()
+            .where("mpc_id").equals(party.mpc_id).return.first())!;
+
         const keyShareEntity = await keyShareRepository.save({
-            analysisId: analysisEntity[EntityId]!,
-            userId: jwtDecoded.client_id,
-            mpcId: party.mpcId,
-            keyShare: party.keyShare,
-            expAt: expAt.getTime(),
+            analysis_id: analysisEntity[EntityId]!,
+            user_id: jwtDecoded.client_id,
+            mpc_id: party.mpc_id,
+            key_share: party.key_share,
+            exp_at: expAt.getTime(),
         });
 
         await keyShareRepository.expireAt((keyShareEntity[EntityId]!), expAt);
 
-        const registeredParty = await mpcPartyRepository
-            .search()
-            .where("mpcId").equals(party.mpcId).return.first();
-
-        if (registeredParty == null) {
-            throw "One or more of the provided MPC parties is not registered in MOZAIK.";
-        }
-
-        // TODO: Kan enkel getest worden als COSIC MPC engine PoC klaar is
         await fetch(
             `${registeredParty.host}/analyse`,
             {
                 method: "POST",
                 body: JSON.stringify({
-                    analysisId: analysisEntity[EntityId]!,
-                    userId: jwtDecoded.client_id,
-                    dataFrom: body.data.from,
-                    dataTo: body.data.to,
-                    userPk: body.userPk,
-                    analysisType: body.analysisType
+                    analysis_id: analysisEntity[EntityId]!,
+                    user_id: jwtDecoded.client_id,
+                    data_index: body.data.index,
+                    user_key: body.user_key,
+                    analysis_type: body.analysis_type
                 }),
-                //TODO? // headers: { "authorization": ...}
+                signal: AbortSignal.timeout(5000)
+                //TODO TLS / CA verification. But... does this work? Because API communicates internally with MPC engines and SSL termination is done at proxy level
             }
         );
 
     });
 
-    return { analysisId: analysisEntity[EntityId]! };
+    return { analysis_id: analysisEntity[EntityId]! };
 }, {
     headers: t.Object({
         authorization: t.String({ description: "JWT Bearer token." })
     }),
     body: "PrepareAnalysis",
     response: {
-        200: t.Object({ analysisId: t.String() }),
+        200: t.Object({ analysis_id: t.String() }),
         500: t.Any()
     },
     detail: {
@@ -107,18 +112,18 @@ analysisController.post("/prepare", async ({ body, jwtDecoded }) => {
     }
 });
 
-analysisController.get("/status/:analysisId",
-    async ({ params: { analysisId }, jwtDecoded, set }) => {
-        const analysisEntity = await analysisSchemaRepository.fetch(analysisId);
+analysisController.get("/status/:analysis_id",
+    async ({ params: { analysis_id }, jwtDecoded }) => {
+        const analysisEntity = await analysisSchemaRepository.fetch(analysis_id);
 
-        if (analysisEntity.userId == undefined || analysisEntity.userId !== jwtDecoded.client_id) {
-            // analysisId does not exist or authenticated user does not have an analysis with this analysisId
+        if (analysisEntity.user_id == undefined || analysisEntity.user_id !== jwtDecoded.client_id) {
+            // analysis_id does not exist or authenticated user does not have an analysis with this analysis_id
             throw new NotFoundError();
         }
 
         const res: {
             statuses: {
-                mpcId: string,
+                mpc_id: string,
                 status: string
             }[]
         } = {
@@ -128,17 +133,22 @@ analysisController.get("/status/:analysisId",
         for (const party of analysisEntity.parties! as string[]) {
             const registeredParty = (await mpcPartyRepository
                 .search()
-                .where("mpcId").equals(party).return.first())!;
+                .where("mpc_id").equals(party).return.first())!;
             res.statuses.push({
-                mpcId: party,
-                status: await (await fetch(`${registeredParty.host}/status/${analysisId}`)).text()
+                mpc_id: party,
+                status: await (
+                    await fetch(
+                        `${registeredParty.host}/status/${analysis_id}`,
+                        { signal: AbortSignal.timeout(5000) }
+                    )
+                ).text()
             });
         }
 
         return res;
     }, {
     params: t.Object({
-        analysisId: t.String()
+        analysis_id: t.String()
     }),
     headers: t.Object({
         authorization: t.String({ description: "JWT Bearer token." })
@@ -147,7 +157,7 @@ analysisController.get("/status/:analysisId",
         200: t.Object({
             statuses: t.Array(
                 t.Object({
-                    mpcId: t.String(),
+                    mpc_id: t.String(),
                     status: t.String()
                 })
             )

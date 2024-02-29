@@ -34,11 +34,11 @@ export const keysController = new Elysia({ prefix: "/keys" })
 
 
 // Use verified JWT token's "client_id" to verify the requester and to only return a key share designated for it
-keysController.get("/share/:analysisId", async ({ params: { analysisId }, jwtDecoded }) => {
+keysController.get("/share/:analysis_id", async ({ params: { analysis_id }, jwtDecoded }) => {
     const share = await keyShareRepository
         .search()
-        .where("analysisId").equals(analysisId)
-        .and("mpcId").equals(jwtDecoded.client_id).return.first();
+        .where("analysis_id").equals(analysis_id)
+        .and("mpc_id").equals(jwtDecoded.client_id).return.first();
 
     if (share == null) {
         throw new NotFoundError();
@@ -47,7 +47,7 @@ keysController.get("/share/:analysisId", async ({ params: { analysisId }, jwtDec
     return share;
 }, {
     params: t.Object({
-        analysisId: t.String({ description: "The key share associated with this analysis." })
+        analysis_id: t.String({ description: "The key share associated with this analysis." })
     }),
     headers: t.Object({
         authorization: t.String({ description: "JWT Bearer token." })
@@ -59,7 +59,7 @@ keysController.get("/share/:analysisId", async ({ params: { analysisId }, jwtDec
     },
     detail: {
         tags: ["Keys"],
-        description: "Retrieve encrypted key share associated with `analysisId` and the MPC `client_id`. The MPC engine needs to provide a valid JWT token with a `client_id` property."
+        description: "Retrieve encrypted key share associated with `analysis_id` and the MPC `client_id`. The MPC engine needs to provide a valid JWT token with a `client_id` property."
     }
 });
 
