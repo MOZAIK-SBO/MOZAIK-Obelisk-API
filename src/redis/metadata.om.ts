@@ -16,7 +16,9 @@ const analysisSchema = new Schema("analyses", {
     user_key: { type: 'string' },
     source_dataset: { type: 'string' },
     result_dataset: { type: 'string' },
+    metric: { type: 'string' },
     data_index: { type: 'number[]' },
+    result_timestamps: { type: 'number[]' },
     parties: { type: 'string[]' },
     analysis_type: { type: 'string' },
     created_at: { type: 'number' },
@@ -27,4 +29,3 @@ export const analysisSchemaRepository = new Repository(analysisSchema, metadata_
 
 await mpcPartyRepository.createIndex();
 await analysisSchemaRepository.createIndex();
-

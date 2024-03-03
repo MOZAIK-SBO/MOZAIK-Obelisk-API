@@ -22,12 +22,17 @@ export function initSwagger(app: Elysia) {
                     url: "https://www.apache.org/licenses/LICENSE-2.0"
                 }
             },
-
+            servers: [
+                {
+                    url: "https://mozaik.ilabt.imec.be"
+                }
+            ],
             tags: [
                 { name: "General", description: "General API endpoints." },
-                { name: "Obelisk", description: "Store data in Obelisk." },
+                { name: "Obelisk", description: "Manage data in Obelisk." },
+                { name: "Data", description: "Manage data in Obelisk." },
                 { name: "Analysis", description: "Request computation." },
-                { name: "Keys", description: "Store keys in the key store." }
+                { name: "MPC Keys", description: "Store MPC keys in the key store." }
             ]
         },
         exclude: [

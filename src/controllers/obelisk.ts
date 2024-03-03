@@ -11,7 +11,11 @@ obeliskController.post("/ingest/:datasetId",
             {
                 method: "POST",
                 body: JSON.stringify(body),
-                headers: { "authorization": headers.authorization }
+                headers: {
+                    "authorization": headers.authorization,
+                    "Content-Type": "application/json",
+                },
+                signal: AbortSignal.timeout(5000)
             }
         );
     }, {
@@ -36,9 +40,11 @@ obeliskController.post("/ingest/:datasetId",
         204: t.Undefined(),
         500: t.Any()
     },
-    detail: { tags: ["Obelisk"] }
+    detail: {
+        tags: ["Obelisk"],
+        description: "Directly ingest into Obelisk. This only exists for development purposes in the PoC. Should not be exposed on the production version of MOZAIK."
+    }
 });
-
 
 obeliskController.post("/query",
     async ({ headers, body }) => {
@@ -47,7 +53,11 @@ obeliskController.post("/query",
             {
                 method: "POST",
                 body: JSON.stringify(body),
-                headers: { "authorization": headers.authorization }
+                headers: {
+                    "authorization": headers.authorization,
+                    "Content-Type": "application/json",
+                },
+                signal: AbortSignal.timeout(10000)
             }
         );
     }, {
@@ -59,6 +69,8 @@ obeliskController.post("/query",
         200: EventsQueryResult,
         500: t.Any()
     },
-    detail: { tags: ["Obelisk"] }
+    detail: {
+        tags: ["Obelisk"],
+        description: "Directly query Obelisk. This only exists for development purposes in the PoC. Should not be exposed on the production version of MOZAIK."
+    }
 });
-

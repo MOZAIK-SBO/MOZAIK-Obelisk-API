@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { initControllers } from "./controllers";
 
-const app = new Elysia();
+const app = new Elysia({ prefix: "/api" });
 
 initControllers(app);
 

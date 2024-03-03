@@ -2,14 +2,16 @@ import { Elysia } from "elysia";
 import { obeliskController } from "./obelisk";
 import { generalController } from "./general";
 import { initSwagger } from "./swagger";
-import { keysController } from "./keys";
+import { mpcKeysController } from "./mpcKeys";
 import { analysisController } from "./analysis ";
+import { dataController } from "./data";
 
-export function initControllers(app: Elysia) {
+export function initControllers(app: Elysia<any>) {
     initSwagger(app);
 
-    app.use(obeliskController);
     app.use(generalController);
-    app.use(keysController);
+    app.use(obeliskController);
+    app.use(dataController);
+    app.use(mpcKeysController);
     app.use(analysisController);
 }

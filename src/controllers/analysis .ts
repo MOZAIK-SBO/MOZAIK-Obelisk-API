@@ -1,52 +1,32 @@
-import { Elysia, NotFoundError, t } from "elysia";
+import { Elysia, InternalServerError, NotFoundError, t } from "elysia";
 import { analysisModel } from "../models/analysis.model";
 import bearer from "@elysiajs/bearer";
-import jwt, { JwtPayload } from "jsonwebtoken";
 import { analysisSchemaRepository, mpcPartyRepository } from "../redis/metadata.om";
 import { keyShareRepository } from "../redis/keyShare.om";
-import { EntityId } from "redis-om";
+import { Entity, EntityId } from "redis-om";
+import { EventsQueryResult } from "../models/obelisk.model";
+import { authResolver } from "../util/resolvers";
 
 export const analysisController = new Elysia({ prefix: "/analysis" })
     .use(bearer())
     .use(analysisModel)
-    .resolve(({ bearer, set }) => {
-        let jwtDecoded: JwtPayload;
+    .resolve(authResolver);
 
-        jwt.verify(
-            bearer!,
-            atob(process.env.KEYCLOAK_OBELISK_PK!),
-            (err, decoded) => {
-                if (err) {
-                    set.status = "Unauthorized";
-                    throw err.toString();
-                }
+analysisController.post("/mpc/prepare", async ({ body, jwtDecoded }) => {
+    const partyEntity: Entity[] = [];
 
-                if (decoded) {
-                    jwtDecoded = decoded as JwtPayload;
-                } else {
-                    set.status = "Internal Server Error";
-                    throw "Cannot decode JWT token";
-                }
-            }
-        );
-
-        return {
-            jwtDecoded: jwtDecoded!
-        }
-    });
-
-
-analysisController.post("/prepare", async ({ body, jwtDecoded }) => {
-    // Make sure all the MPC parties are registered in MOZAIK
-    body.parties.forEach(async party => {
+    // Make sure all the MPC parties are registered with MOZAIK
+    for (const party of body.parties) {
         const registeredParty = await mpcPartyRepository
             .search()
             .where("mpc_id").equals(party.mpc_id).return.first();
 
         if (registeredParty == null) {
-            throw "One or more of the provided MPC parties are not registered in MOZAIK.";
+            throw new InternalServerError("One or more of the provided MPC parties are not registered in MOZAIK.");
         }
-    });
+
+        partyEntity.push(registeredParty);
+    }
 
     const currentTime = Date.now();
     const expAt = new Date(currentTime + body.exp_hours * 60 * 60 * 1000);
@@ -56,18 +36,16 @@ analysisController.post("/prepare", async ({ body, jwtDecoded }) => {
         user_key: body.user_key,
         source_dataset: body.data.source,
         result_dataset: body.data.result,
+        metric: body.data.metric,
         data_index: body.data.index,
+        result_timestamps: [],
         parties: body.parties.map((party) => party.mpc_id),
         analysis_type: body.analysis_type,
         created_at: currentTime,
         keys_exp_at: expAt.getTime()
     });
 
-    body.parties.forEach(async party => {
-        const registeredParty = (await mpcPartyRepository
-            .search()
-            .where("mpc_id").equals(party.mpc_id).return.first())!;
-
+    for (const [index, party] of body.parties.entries()) {
         const keyShareEntity = await keyShareRepository.save({
             analysis_id: analysisEntity[EntityId]!,
             user_id: jwtDecoded.client_id,
@@ -79,7 +57,7 @@ analysisController.post("/prepare", async ({ body, jwtDecoded }) => {
         await keyShareRepository.expireAt((keyShareEntity[EntityId]!), expAt);
 
         await fetch(
-            `${registeredParty.host}/analyse`,
+            `${partyEntity[index].host}/analyse`,
             {
                 method: "POST",
                 body: JSON.stringify({
@@ -93,33 +71,39 @@ analysisController.post("/prepare", async ({ body, jwtDecoded }) => {
                 //TODO TLS / CA verification. But... does this work? Because API communicates internally with MPC engines and SSL termination is done at proxy level
             }
         );
-
-    });
+    }
 
     return { analysis_id: analysisEntity[EntityId]! };
 }, {
     headers: t.Object({
         authorization: t.String({ description: "JWT Bearer token." })
     }),
-    body: "PrepareAnalysis",
+    body: "PrepareMpcAnalysis",
     response: {
         200: t.Object({ analysis_id: t.String() }),
         500: t.Any()
     },
     detail: {
         tags: ["Analysis"],
-        description: "Prepare an analysis. This will create an analysis ID and queue the computation on the selected MPC parties."
+        description: "Prepare an MPC analysis. This will create an analysis ID and queue the computation on the selected MPC parties."
     }
 });
 
+async function fetchAnalysisEntity(user_id: string, analysis_id: string): Promise<Entity> {
+    const analysisEntity = await analysisSchemaRepository.fetch(analysis_id);
+
+    if (analysisEntity.user_id == undefined || analysisEntity.user_id !== user_id) {
+        // analysis_id does not exist or authenticated user does not have an analysis with this analysis_id
+        throw new NotFoundError();
+    }
+
+    return analysisEntity;
+}
+
+// Called by user from dashboard
 analysisController.get("/status/:analysis_id",
     async ({ params: { analysis_id }, jwtDecoded }) => {
-        const analysisEntity = await analysisSchemaRepository.fetch(analysis_id);
-
-        if (analysisEntity.user_id == undefined || analysisEntity.user_id !== jwtDecoded.client_id) {
-            // analysis_id does not exist or authenticated user does not have an analysis with this analysis_id
-            throw new NotFoundError();
-        }
+        const analysisEntity = await fetchAnalysisEntity(jwtDecoded.client_id, analysis_id);
 
         const res: {
             statuses: {
@@ -130,7 +114,7 @@ analysisController.get("/status/:analysis_id",
             statuses: []
         };
 
-        for (const party of analysisEntity.parties! as string[]) {
+        for (const party of analysisEntity.parties as string[]) {
             const registeredParty = (await mpcPartyRepository
                 .search()
                 .where("mpc_id").equals(party).return.first())!;
@@ -162,7 +146,6 @@ analysisController.get("/status/:analysis_id",
                 })
             )
         }),
-        403: t.Any(),
         404: t.Any(),
         500: t.Any()
     },
@@ -172,4 +155,144 @@ analysisController.get("/status/:analysis_id",
     }
 });
 
+// Called by MPC parties
+analysisController.post("/data/query/:analysis_id",
+    async ({ params: { analysis_id }, headers, body }) => {
+        const analysisEntity = await fetchAnalysisEntity(body.user_id, analysis_id);
 
+        return await fetch(
+            `${process.env.OBELISK_ENDPOINT}/data/query/events`,
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    dataRange: {
+                        datasets: [analysisEntity.source_dataset],
+                        metrics: [analysisEntity.metric]
+                    },
+                    from: Math.min(...body.data_index),
+                    to: Math.max(...body.data_index) + 1
+                }),
+                headers: {
+                    "authorization": headers.authorization,
+                    "Content-Type": "application/json",
+                },
+                signal: AbortSignal.timeout(10000)
+            }
+        );
+    }, {
+    params: t.Object({
+        analysis_id: t.String()
+    }),
+    headers: t.Object({
+        authorization: t.String({ description: "JWT Bearer token." })
+    }),
+    body: "FetchAnalysisData",
+    response: {
+        200: EventsQueryResult,
+        500: t.Any()
+    },
+    detail: {
+        tags: ["Analysis"],
+        description: "Fetch the encrypted data that needs to be computed."
+    }
+});
+
+// Called by user from dashboard
+analysisController.get("/result/:analysis_id",
+    async ({ params: { analysis_id }, jwtDecoded, headers }) => {
+        const analysisEntity = await fetchAnalysisEntity(jwtDecoded.client_id, analysis_id);
+
+        if ((analysisEntity.result_timestamps as number[]).length < 1) {
+            // No results yet
+            return {
+                items: [],
+                cursor: null
+            }
+        }
+
+        return await fetch(
+            `${process.env.OBELISK_ENDPOINT}/data/query/events`,
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    dataRange: {
+                        datasets: [analysisEntity.result_dataset],
+                        metrics: [analysisEntity.metric]
+                    },
+                    from: Math.min(...(analysisEntity.result_timestamps as number[])),
+                    to: Math.max(...(analysisEntity.result_timestamps as number[])) + 1
+                }),
+                headers: {
+                    "authorization": headers.authorization,
+                    "Content-Type": "application/json",
+                },
+                signal: AbortSignal.timeout(10000)
+            }
+        );
+    }, {
+    params: t.Object({
+        analysis_id: t.String()
+    }),
+    headers: t.Object({
+        authorization: t.String({ description: "JWT Bearer token." })
+    }),
+    response: {
+        200: EventsQueryResult,
+        500: t.Any()
+    },
+    detail: {
+        tags: ["Analysis"],
+        description: "Get the encrypted result of the computation."
+    }
+});
+
+// Called by MPC parties
+analysisController.post("/result/:analysis_id",
+    async ({ params: { analysis_id }, jwtDecoded, headers, body }) => {
+        const currentTime = Date.now();
+
+        const analysisEntity = await fetchAnalysisEntity(body.user_id, analysis_id);
+
+        const ingestResponse = await fetch(
+            `${process.env.OBELISK_ENDPOINT}/data/ingest/${analysisEntity.result_dataset}`,
+            {
+                method: "POST",
+                body: JSON.stringify([{
+                    timestamp: currentTime,
+                    metric: analysisEntity.metric,
+                    value: {
+                        is_combined: body.is_combined != null ? body.is_combined : false,
+                        c_result: body.result
+                    },
+                    source: jwtDecoded.client_id
+                }]),
+                headers: {
+                    "authorization": headers.authorization,
+                    "Content-Type": "application/json",
+                },
+                signal: AbortSignal.timeout(5000)
+            }
+        );
+
+        // Store the result timestamp
+        (analysisEntity.result_timestamps as number[]).push(currentTime);
+        await analysisSchemaRepository.save(analysisEntity);
+
+        return ingestResponse;
+    }, {
+    params: t.Object({
+        analysis_id: t.String()
+    }),
+    headers: t.Object({
+        authorization: t.String({ description: "JWT Bearer token." })
+    }),
+    body: "StoreAnalysisResult",
+    response: {
+        204: t.Undefined(),
+        500: t.Any()
+    },
+    detail: {
+        tags: ["Analysis"],
+        description: "Store an encrypted result of the computation."
+    }
+});
