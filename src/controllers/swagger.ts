@@ -32,12 +32,13 @@ export function initSwagger(app: Elysia) {
                 { name: "Obelisk", description: "Manage data in Obelisk." },
                 { name: "Data", description: "Manage data in Obelisk." },
                 { name: "Analysis", description: "Request computation." },
-                { name: "MPC Keys", description: "Store MPC keys in the key store." }
+                { name: "MPC Keys", description: "Retrieve MPC key shares from the key store." },
+                { name: "FHE Keys", description: "Manage FHE keys in the key store." },
             ]
         },
         exclude: [
-            "/docs",
-            "/docs/json"
+            "/api/docs",
+            "/api/docs/json"
         ]
     }));
 }
