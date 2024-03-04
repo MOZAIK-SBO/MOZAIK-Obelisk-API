@@ -6,6 +6,7 @@ import { keyShareRepository } from "../redis/keyShare.om";
 import { Entity, EntityId } from "redis-om";
 import { EventsQueryResult } from "../models/obelisk.model";
 import { authResolver } from "../util/resolvers";
+import https from "https";
 
 export const analysisController = new Elysia({ prefix: "/analysis" })
     .use(bearer())
@@ -56,21 +57,32 @@ analysisController.post("/mpc/prepare", async ({ body, jwtDecoded }) => {
 
         await keyShareRepository.expireAt((keyShareEntity[EntityId]!), expAt);
 
-        await fetch(
-            `${partyEntity[index].host}/analyse`,
-            {
-                method: "POST",
-                body: JSON.stringify({
-                    analysis_id: analysisEntity[EntityId]!,
-                    user_id: jwtDecoded.client_id,
-                    data_index: body.data.index,
-                    user_key: body.user_key,
-                    analysis_type: body.analysis_type
-                }),
-                signal: AbortSignal.timeout(5000)
-                //TODO TLS / CA verification. But... does this work? Because API communicates internally with MPC engines and SSL termination is done at proxy level
+        // TODO: Requires testing with COSIC
+        const request = https.request({
+            href: `${partyEntity[index].host}/analyse`,
+            method: "POST",
+            signal: AbortSignal.timeout(5000),
+            cert: await Bun.file(`${import.meta.dir}/../../certs/api.crt`).text(),
+            key: await Bun.file(`${import.meta.dir}/../../certs/api.key`).text(),
+            ca: await Bun.file(`${import.meta.dir}/../../certs/mozaik-ca.crt`).text(),
+            headers: {
+                "Content-Type": "application/json",
             }
-        );
+        });
+
+        request.on("error", e => { throw new InternalServerError(e.message) });
+
+        request.write(JSON.stringify(
+            {
+                analysis_id: analysisEntity[EntityId]!,
+                user_id: jwtDecoded.client_id,
+                data_index: body.data.index,
+                user_key: body.user_key,
+                analysis_type: body.analysis_type
+            }
+        ));
+
+        request.end();
     }
 
     return { analysis_id: analysisEntity[EntityId]! };
@@ -118,15 +130,27 @@ analysisController.get("/status/:analysis_id",
             const registeredParty = (await mpcPartyRepository
                 .search()
                 .where("mpc_id").equals(party).return.first())!;
-            res.statuses.push({
-                mpc_id: party,
-                status: await (
-                    await fetch(
-                        `${registeredParty.host}/status/${analysis_id}`,
-                        { signal: AbortSignal.timeout(5000) }
-                    )
-                ).text()
+
+
+            // TODO: Requires testing with COSIC
+            const request = https.request({
+                href: `${registeredParty.host}/status/${analysis_id}`,
+                method: "GET",
+                signal: AbortSignal.timeout(5000),
+                cert: await Bun.file(`${import.meta.dir}/../../certs/api.crt`).text(),
+                key: await Bun.file(`${import.meta.dir}/../../certs/api.key`).text(),
+                ca: await Bun.file(`${import.meta.dir}/../../certs/mozaik-ca.crt`).text(),
+            }, response => {
+                response.on("data", d => {
+                    res.statuses.push({
+                        mpc_id: party,
+                        status: d
+                    });
+                });
             });
+
+            request.on("error", e => { throw new InternalServerError(e.message) });
+            request.end();
         }
 
         return res;
