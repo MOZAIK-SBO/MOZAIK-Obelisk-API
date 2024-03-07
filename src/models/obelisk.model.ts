@@ -103,10 +103,19 @@ const EventsQuery = t.Object({
     cursor: t.Optional(t.String())
 });
 
+const MozaikEventsQuery = t.Object({
+    dataRange: t.Object({
+        datasets: t.Array(t.String()),
+        metrics: t.Optional(t.Array(t.String()))
+    }),
+    limit: t.Optional(t.Numeric({ default: 2500 })),
+});
+
 
 export const obeliskModel = new Elysia({ name: "obeliskModel" })
     .model({
         IngestBatch,
         MozaikIngestBatch,
-        EventsQuery
+        EventsQuery,
+        MozaikEventsQuery
     });
