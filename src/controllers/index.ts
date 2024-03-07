@@ -5,13 +5,15 @@ import { initSwagger } from "./swagger";
 import { mpcKeysController } from "./mpcKeys";
 import { analysisController } from "./analysis ";
 import { dataController } from "./data";
+import { mpcPartiesController } from "./mpcParties";
 
 export function initControllers(app: Elysia<any>) {
-    initSwagger(app);
+  initSwagger(app);
 
-    app.use(generalController);
-    app.use(obeliskController);
-    app.use(dataController);
-    app.use(mpcKeysController);
-    app.use(analysisController);
+  app.use(generalController);
+  app.use(obeliskController);
+  app.use(dataController);
+  app.use(mpcKeysController);
+  app.use(analysisController);
+  app.use(mpcPartiesController);
 }

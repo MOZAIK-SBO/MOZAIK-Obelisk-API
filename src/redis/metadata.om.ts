@@ -4,6 +4,7 @@ import { metadata_client } from "./metadata.client";
 
 const mpcPartySchema = new Schema("mpc-parties", {
     mpc_id: { type: 'string' },
+    mpc_key: { type: 'string' },
     host: { type: 'string' },
     region: { type: 'string' }
 });

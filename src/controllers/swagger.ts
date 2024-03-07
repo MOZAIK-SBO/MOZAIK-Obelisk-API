@@ -29,11 +29,12 @@ export function initSwagger(app: Elysia) {
             ],
             tags: [
                 { name: "General", description: "General API endpoints." },
-                { name: "Obelisk", description: "Manage data in Obelisk." },
-                { name: "Data", description: "Manage data in Obelisk." },
+                { name: "Data", description: "Store and query data from Obelisk." },
                 { name: "Analysis", description: "Request computation." },
+                { name: "MPC Parties", description: "Query and register MPC parties." },
                 { name: "MPC Keys", description: "Retrieve MPC key shares from the key store." },
                 { name: "FHE Keys", description: "Manage FHE keys in the key store." },
+                { name: "Obelisk", description: "Manage data in Obelisk." },
             ]
         },
         exclude: [
