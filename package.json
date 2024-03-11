@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@elysiajs/bearer": "^0.8.0",
+    "@elysiajs/cors": "^0.8.0",
     "@elysiajs/swagger": "^0.8.5",
     "elysia": "latest",
     "jsonwebtoken": "^9.0.2",
@@ -20,4 +21,3 @@
   },
   "module": "src/index.js"
 }
-
