@@ -1,4 +1,5 @@
 import { swagger } from "@elysiajs/swagger";
+import { version } from "../../package.json";
 import Elysia from "elysia";
 
 export function initSwagger(app: Elysia) {
@@ -11,7 +12,7 @@ export function initSwagger(app: Elysia) {
       documentation: {
         info: {
           title: "MOZAIK-Obelisk API",
-          version: "0.1.1",
+          version: version,
           contact: {
             email: "mozaik@esat.kuleuven.be",
             name: "MOZAIK: Scalable and Secure Data Sharing",
