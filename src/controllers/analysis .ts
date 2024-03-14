@@ -1,5 +1,9 @@
 import { Elysia, InternalServerError, NotFoundError, t } from "elysia";
-import { MpcQueryDataResult, analysisModel } from "../models/analysis.model";
+import {
+  AnalysisEntities,
+  MpcQueryDataResult,
+  analysisModel,
+} from "../models/analysis.model";
 import bearer from "@elysiajs/bearer";
 import {
   analysisSchemaRepository,
@@ -113,6 +117,39 @@ analysisController.post(
       tags: ["Analysis"],
       description:
         "Prepare an MPC analysis. This will create an analysis ID and queue the computation on the selected MPC parties.",
+    },
+  },
+);
+
+analysisController.get(
+  "/",
+  async ({ jwtDecoded }) => {
+    const analysisEntities = (
+      await analysisSchemaRepository
+        .search()
+        .where("user_id")
+        .equals(jwtDecoded.client_id)
+        .return.all()
+    ).map((analysisEntity: Entity) => {
+      return {
+        ...analysisEntity,
+        analysis_id: analysisEntity[EntityId]!,
+      };
+    });
+
+    return analysisEntities;
+  },
+  {
+    headers: t.Object({
+      authorization: t.String({ description: "JWT Bearer token." }),
+    }),
+    response: {
+      200: AnalysisEntities,
+      500: t.Any(),
+    },
+    detail: {
+      tags: ["Analysis"],
+      description: "Get list of all analysis from this user.",
     },
   },
 );

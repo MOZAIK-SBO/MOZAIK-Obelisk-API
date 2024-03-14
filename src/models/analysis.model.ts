@@ -58,6 +58,23 @@ export const MpcQueryDataResult = t.Object({
   user_data: t.Array(t.String()),
 });
 
+const AnalysisEntity = t.Object({
+  analysis_id: t.String(),
+  user_id: t.String(),
+  user_key: t.String(),
+  source_dataset: t.String(),
+  result_dataset: t.String(),
+  metric: t.String(),
+  data_index: t.Array(t.Number()),
+  result_timestamps: t.Array(t.Number()),
+  parties: t.Array(t.String()),
+  analysis_type: t.String(),
+  created_at: t.Number(),
+  keys_exp_at: t.Number(),
+});
+
+export const AnalysisEntities = t.Array(AnalysisEntity);
+
 export const analysisModel = new Elysia({ name: "analysisModel" }).model({
   PrepareMpcAnalysis,
   FetchAnalysisData,
