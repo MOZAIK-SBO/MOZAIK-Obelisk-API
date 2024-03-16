@@ -3,7 +3,7 @@ import { obeliskController } from "./obelisk";
 import { generalController } from "./general";
 import { initSwagger } from "./swagger";
 import { mpcKeysController } from "./mpcKeys";
-import { analysisController } from "./analysis ";
+import { analysisController } from "./analysis";
 import { dataController } from "./data";
 import { mpcPartiesController } from "./mpcParties";
 

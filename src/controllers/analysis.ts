@@ -70,36 +70,38 @@ analysisController.post(
 
       await keyShareRepository.expireAt(keyShareEntity[EntityId]!, expAt);
 
-      // TODO: Requires testing with COSIC
-      const request = https.request({
-        href: `${partyEntity[index].host}/analyse`,
-        method: "POST",
-        signal: AbortSignal.timeout(5000),
-        cert: await Bun.file(`${import.meta.dir}/../../certs/api.crt`).text(),
-        key: await Bun.file(`${import.meta.dir}/../../certs/api.key`).text(),
-        ca: await Bun.file(
-          `${import.meta.dir}/../../certs/mozaik-ca.crt`,
-        ).text(),
-        headers: {
-          "Content-Type": "application/json",
-        },
+      await new Promise<void>(async (resolve, reject) => {
+        // TODO: Requires testing with COSIC
+        const request = https.request({
+          href: `${partyEntity[index].host}/analyse`,
+          method: "POST",
+          signal: AbortSignal.timeout(5000),
+          cert: await Bun.file(`${import.meta.dir}/../../certs/api.crt`).text(),
+          key: await Bun.file(`${import.meta.dir}/../../certs/api.key`).text(),
+          ca: await Bun.file(
+            `${import.meta.dir}/../../certs/mozaik-ca.crt`,
+          ).text(),
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        request.on("error", (e) => {
+          reject(e);
+        });
+
+        request.write(
+          JSON.stringify({
+            analysis_id: analysisEntity[EntityId]!,
+            user_id: jwtDecoded.client_id,
+            data_index: body.data.index,
+            user_key: body.user_key,
+            analysis_type: body.analysis_type,
+          }),
+        );
+
+        request.end(() => resolve());
       });
-
-      request.on("error", (e) => {
-        throw new InternalServerError(e.message);
-      });
-
-      request.write(
-        JSON.stringify({
-          analysis_id: analysisEntity[EntityId]!,
-          user_id: jwtDecoded.client_id,
-          data_index: body.data.index,
-          user_key: body.user_key,
-          analysis_type: body.analysis_type,
-        }),
-      );
-
-      request.end();
     }
 
     return { analysis_id: analysisEntity[EntityId]! };
@@ -196,32 +198,40 @@ analysisController.get(
         .equals(party)
         .return.first())!;
 
-      // TODO: Requires testing with COSIC
-      const request = https.request(
-        {
-          href: `${registeredParty.host}/status/${analysis_id}`,
-          method: "GET",
-          signal: AbortSignal.timeout(5000),
-          cert: await Bun.file(`${import.meta.dir}/../../certs/api.crt`).text(),
-          key: await Bun.file(`${import.meta.dir}/../../certs/api.key`).text(),
-          ca: await Bun.file(
-            `${import.meta.dir}/../../certs/mozaik-ca.crt`,
-          ).text(),
-        },
-        (response) => {
-          response.on("data", (d) => {
-            res.statuses.push({
-              mpc_id: party,
-              status: d,
-            });
-          });
-        },
-      );
+      await new Promise<void>(async (resolve, reject) => {
+        // TODO: Requires testing with COSIC
+        const request = https.request(
+          {
+            href: `${registeredParty.host}/status/${analysis_id}`,
+            method: "GET",
+            signal: AbortSignal.timeout(5000),
+            cert: await Bun.file(
+              `${import.meta.dir}/../../certs/api.crt`,
+            ).text(),
+            key: await Bun.file(
+              `${import.meta.dir}/../../certs/api.key`,
+            ).text(),
+            ca: await Bun.file(
+              `${import.meta.dir}/../../certs/mozaik-ca.crt`,
+            ).text(),
+          },
+          (response) => {
+            response.on("data", (d) => {
+              res.statuses.push({
+                mpc_id: party,
+                status: d,
+              });
 
-      request.on("error", (e) => {
-        throw new InternalServerError(e.message);
+              resolve();
+            });
+          },
+        );
+
+        request.on("error", (e) => {
+          reject(e);
+        });
+        request.end();
       });
-      request.end();
     }
 
     return res;
