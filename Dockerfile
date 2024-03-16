@@ -13,14 +13,15 @@ RUN mkdir -p /temp/prod
 COPY package.json bun.lockb /temp/prod/
 RUN cd /temp/prod && bun install --frozen-lockfile --production
 
-ENV NODE_ENV=production
-
 # copy production dependencies and source code into final image
 FROM base AS release
 COPY --from=install /temp/prod/node_modules node_modules
-COPY . .
+COPY --chown=bun:bun . .
+
+ENV NODE_ENV=production
 
 # run the app
 USER bun
 EXPOSE 3000/tcp
 ENTRYPOINT [ "bun", "start" ]
+
