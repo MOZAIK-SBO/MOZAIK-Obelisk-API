@@ -385,6 +385,9 @@ analysisController.post(
             timestamp: currentTime,
             metric: analysisEntity.metric,
             value: {
+              // TODO: We also need to store the data index (timestamp) of the encrypted data point associatiod with this result
+              //       because if an analsysis consists of multiple data points, and the results are not combined yet, we can combine
+              //       the related shares. Otherwise, we would not know which shares are from one computation.
               is_combined: body.is_combined != null ? body.is_combined : false,
               c_result: body.result,
             },
