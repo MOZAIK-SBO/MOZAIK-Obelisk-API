@@ -13,7 +13,8 @@ import { keyShareRepository } from "../redis/keyShare.om";
 import { Entity, EntityId } from "redis-om";
 import { EventsQueryResult } from "../models/obelisk.model";
 import { authResolver } from "../util/resolvers";
-import https from "https";
+//import https from "https";
+import { $ } from "bun";
 
 export const analysisController = new Elysia({ prefix: "/analysis" })
   .use(bearer())
@@ -70,38 +71,63 @@ analysisController.post(
 
       await keyShareRepository.expireAt(keyShareEntity[EntityId]!, expAt);
 
-      await new Promise<void>(async (resolve, reject) => {
-        // TODO: Requires testing with COSIC
-        const request = https.request({
-          href: `${partyEntity[index].host}/analyse`,
-          method: "POST",
-          signal: AbortSignal.timeout(5000),
-          cert: await Bun.file(`${import.meta.dir}/../../certs/api.crt`).text(),
-          key: await Bun.file(`${import.meta.dir}/../../certs/api.key`).text(),
-          ca: await Bun.file(
-            `${import.meta.dir}/../../certs/mozaik-ca.crt`,
-          ).text(),
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
+      // Bug in Bun: https://github.com/oven-sh/bun/issues/6940
+      // Use curl as a temp "fix"
 
-        request.on("error", (e) => {
-          reject(e);
-        });
+      // await new Promise<void>(async (resolve, reject) => {
+      //   const request = https.request({
+      //     href: `${partyEntity[index].host}/analyse`,
+      //     method: "POST",
+      //     signal: AbortSignal.timeout(5000),
+      //     cert: await Bun.file(`${import.meta.dir}/../../certs/api.crt`).text(),
+      //     key: await Bun.file(`${import.meta.dir}/../../certs/api.key`).text(),
+      //     ca: await Bun.file(
+      //       `${import.meta.dir}/../../certs/mozaik-ca.crt`,
+      //     ).text(),
+      //     headers: {
+      //       "Content-Type": "application/json",
+      //     },
+      //   });
+      //
+      //   request.on("error", (e) => {
+      //     reject(e);
+      //   });
+      //
+      //   request.write(
+      //     JSON.stringify({
+      //       analysis_id: analysisEntity[EntityId]!,
+      //       user_id: jwtDecoded.client_id,
+      //       data_index: body.data.index,
+      //       user_key: body.user_key,
+      //       analysis_type: body.analysis_type,
+      //     }),
+      //   );
+      //
+      //   request.end(() => resolve());
+      // });
 
-        request.write(
-          JSON.stringify({
-            analysis_id: analysisEntity[EntityId]!,
-            user_id: jwtDecoded.client_id,
-            data_index: body.data.index,
-            user_key: body.user_key,
-            analysis_type: body.analysis_type,
-          }),
+      const response = JSON.parse(
+        await $`curl \
+                        --cert ${import.meta.dir}/../../certs/api.crt \
+                        --key ${import.meta.dir}/../../certs/api.key \
+                        --cacert ${import.meta.dir}/../../certs/mpc-ca.crt \
+                        -H "Content-Type: application/json" \
+                        -X POST \
+                        -d '${JSON.stringify({
+                          analysis_id: analysisEntity[EntityId]!,
+                          user_id: jwtDecoded.client_id,
+                          data_index: body.data.index,
+                          user_key: body.user_key,
+                          analysis_type: body.analysis_type,
+                        })}' \
+                        ${partyEntity[index].host}/analyse`.text(),
+      );
+
+      if (response.error != null) {
+        throw new InternalServerError(
+          JSON.stringify({ mpc_error: response.error }),
         );
-
-        request.end(() => resolve());
-      });
+      }
     }
 
     return { analysis_id: analysisEntity[EntityId]! };
@@ -198,39 +224,62 @@ analysisController.get(
         .equals(party)
         .return.first())!;
 
-      await new Promise<void>(async (resolve, reject) => {
-        // TODO: Requires testing with COSIC
-        const request = https.request(
-          {
-            href: `${registeredParty.host}/status/${analysis_id}`,
-            method: "GET",
-            signal: AbortSignal.timeout(5000),
-            cert: await Bun.file(
-              `${import.meta.dir}/../../certs/api.crt`,
-            ).text(),
-            key: await Bun.file(
-              `${import.meta.dir}/../../certs/api.key`,
-            ).text(),
-            ca: await Bun.file(
-              `${import.meta.dir}/../../certs/mozaik-ca.crt`,
-            ).text(),
-          },
-          (response) => {
-            response.on("data", (d) => {
-              res.statuses.push({
-                mpc_id: party,
-                status: d,
-              });
+      // Bug in Bun: https://github.com/oven-sh/bun/issues/6940
+      // Use curl as a temp "fix"
 
-              resolve();
-            });
-          },
+      // await new Promise<void>(async (resolve, reject) => {
+      //   const request = https.request(
+      //     {
+      //       host: `${registeredParty.host}/status/${analysis_id}`,
+      //       method: "GET",
+      //       signal: AbortSignal.timeout(5000),
+      //       cert: await Bun.file(
+      //         `${import.meta.dir}/../../certs/api.crt`,
+      //       ).text(),
+      //       key: await Bun.file(
+      //         `${import.meta.dir}/../../certs/api.key`,
+      //       ).text(),
+      //       ca: await Bun.file(
+      //         `${import.meta.dir}/../../certs/mpc-ca.crt`,
+      //       ).text(),
+      //     },
+      //     (response) => {
+      //       response.on("data", (d) => {
+      //         console.log(d);
+      //         res.statuses.push({
+      //           mpc_id: party,
+      //           status: d,
+      //         });
+      //
+      //         resolve();
+      //       });
+      //     },
+      //   );
+      //
+      //   request.on("error", (e) => {
+      //     console.log(e);
+      //     reject(e);
+      //   });
+      //   request.end();
+      // });
+
+      const response = JSON.parse(
+        await $`curl \
+                      --cert ${import.meta.dir}/../../certs/api.crt \
+                      --key ${import.meta.dir}/../../certs/api.key \
+                      --cacert ${import.meta.dir}/../../certs/mpc-ca.crt \
+                      ${registeredParty.host}/status/${analysis_id}`.text(),
+      );
+
+      if (response.error != null) {
+        throw new InternalServerError(
+          JSON.stringify({ mpc_error: response.error }),
         );
+      }
 
-        request.on("error", (e) => {
-          reject(e);
-        });
-        request.end();
+      res.statuses.push({
+        mpc_id: party,
+        status: response.type,
       });
     }
 

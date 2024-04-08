@@ -15,6 +15,9 @@ RUN cd /temp/prod && bun install --frozen-lockfile --production
 
 # copy production dependencies and source code into final image
 FROM base AS release
+
+RUN apt-get update && apt-get install curl -y && rm -rf /var/lib/apt/lists/*
+
 COPY --from=install /temp/prod/node_modules node_modules
 COPY --chown=bun:bun . .
 
