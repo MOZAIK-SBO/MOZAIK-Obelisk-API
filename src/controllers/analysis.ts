@@ -106,26 +106,33 @@ analysisController.post(
       //   request.end(() => resolve());
       // });
 
-      const response = JSON.parse(
-        await $`curl \
-                        --cert ${import.meta.dir}/../../certs/api.crt \
-                        --key ${import.meta.dir}/../../certs/api.key \
-                        --cacert ${import.meta.dir}/../../certs/mpc-ca.crt \
-                        -H "Content-Type: application/json" \
-                        -X POST \
-                        -d '${JSON.stringify({
-                          analysis_id: analysisEntity[EntityId]!,
-                          user_id: jwtDecoded.client_id,
-                          data_index: body.data.index,
-                          user_key: body.user_key,
-                          analysis_type: body.analysis_type,
-                        })}' \
-                        ${partyEntity[index].host}/analyse`.text(),
-      );
+      const responseText = await $`curl \
+                                          --cert ${import.meta.dir}/../../certs/api.crt \
+                                          --key ${import.meta.dir}/../../certs/api.key \
+                                          --cacert ${import.meta.dir}/../../certs/mpc-ca.crt \
+                                          -H "Content-Type: application/json" \
+                                          -X POST \
+                                          -d '${JSON.stringify({
+                                            analysis_id:
+                                              analysisEntity[EntityId]!,
+                                            user_id: jwtDecoded.client_id,
+                                            data_index: body.data.index,
+                                            user_key: body.user_key,
+                                            analysis_type: body.analysis_type,
+                                          })}' \
+                                          ${partyEntity[index].host}/analyse`.text();
 
-      if (response.error != null) {
+      try {
+        const response = JSON.parse(responseText);
+
+        if (response.error != null) {
+          throw new InternalServerError(
+            JSON.stringify({ mpc_error: response.error }),
+          );
+        }
+      } catch (e: any) {
         throw new InternalServerError(
-          JSON.stringify({ mpc_error: response.error }),
+          JSON.stringify({ error: e, raw_response: responseText }),
         );
       }
     }
