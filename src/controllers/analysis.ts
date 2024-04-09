@@ -120,7 +120,7 @@ analysisController.post(
                                             user_key: body.user_key,
                                             analysis_type: body.analysis_type,
                                           })}' \
-                                          ${partyEntity[index].host}/analyse`.text();
+                                          -L ${partyEntity[index].host}/analyse/`.text();
 
       try {
         const response = JSON.parse(responseText);
@@ -275,7 +275,7 @@ analysisController.get(
                       --cert ${import.meta.dir}/../../certs/api.crt \
                       --key ${import.meta.dir}/../../certs/api.key \
                       --cacert ${import.meta.dir}/../../certs/mpc-ca.crt \
-                      ${registeredParty.host}/status/${analysis_id}`.text(),
+                      -L ${registeredParty.host}/status/${analysis_id}`.text(),
       );
 
       if (response.error != null) {
