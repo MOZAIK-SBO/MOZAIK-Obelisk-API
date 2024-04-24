@@ -15,6 +15,7 @@ import { EventsQueryResult } from "../models/obelisk.model";
 import { authResolver } from "../util/resolvers";
 //import https from "https";
 import { $ } from "bun";
+import { app } from "..";
 
 export const analysisController = new Elysia({ prefix: "/analysis" })
   .use(bearer())
@@ -58,6 +59,7 @@ analysisController.post(
       analysis_type: body.analysis_type,
       created_at: currentTime,
       keys_exp_at: expAt.getTime(),
+      latest_status: "Queued",
     });
 
     for (const [index, party] of body.parties.entries()) {
@@ -158,21 +160,68 @@ analysisController.post(
 
 analysisController.get(
   "/",
-  async ({ jwtDecoded }) => {
-    const analysisEntities = (
-      await analysisSchemaRepository
-        .search()
-        .where("user_id")
-        .equals(jwtDecoded.client_id)
-        .return.all()
-    ).map((analysisEntity: Entity) => {
+  async ({ jwtDecoded, headers }) => {
+    let analysisEntities = await analysisSchemaRepository
+      .search()
+      .where("user_id")
+      .equals(jwtDecoded.client_id)
+      .return.all();
+
+    analysisEntities = await Promise.all(
+      analysisEntities.map(async (analysisEntity: Entity) => {
+        if (
+          analysisEntity.latest_status !== "Completed" &&
+          analysisEntity.latest_status !== "Failed"
+        ) {
+          const statuses = await fetch(
+            `${app.server!.url.origin}/api/analysis/status/${analysisEntity[EntityId]!}`,
+            {
+              headers: {
+                authorization: headers.authorization,
+              },
+              signal: AbortSignal.timeout(10000),
+            },
+          )
+            .then((res) => {
+              if (res.ok) {
+                return res.json();
+              } else {
+                return { statuses: [{ status: "Unknown" }] };
+              }
+            })
+            .then((res) => res.statuses);
+
+          const analysisStatusesSet = new Set(
+            statuses.map(({ status }: { status: string }) =>
+              status.toLowerCase(),
+            ),
+          );
+
+          // Always show the least advanced status
+          if (analysisStatusesSet.has("failed")) {
+            analysisEntity.latest_status = "Failed";
+          } else if (analysisStatusesSet.has("queuing")) {
+            analysisEntity.latest_status = "Queued";
+          } else if (analysisStatusesSet.has("running")) {
+            analysisEntity.latest_status = "Running";
+          } else if (analysisStatusesSet.has("completed")) {
+            analysisEntity.latest_status = "Completed";
+          } else {
+            analysisEntity.latest_status = "Unknown";
+          }
+
+          await analysisSchemaRepository.save(analysisEntity);
+        }
+        return analysisEntity;
+      }),
+    );
+
+    return analysisEntities.map((analysisEntity: Entity) => {
       return {
         ...analysisEntity,
         analysis_id: analysisEntity[EntityId]!,
       };
     });
-
-    return analysisEntities;
   },
   {
     headers: t.Object({
@@ -206,7 +255,7 @@ async function fetchAnalysisEntity(
   return analysisEntity;
 }
 
-// Called by user from dashboard
+// Called by user if needed. Dashboard does not use this. Dashboard uses the status from the metadata database.
 analysisController.get(
   "/status/:analysis_id",
   async ({ params: { analysis_id }, jwtDecoded }) => {
@@ -389,22 +438,30 @@ analysisController.get(
       };
     }
 
-    return await fetch(`${process.env.OBELISK_ENDPOINT}/data/query/events`, {
-      method: "POST",
-      body: JSON.stringify({
-        dataRange: {
-          datasets: [analysisEntity.result_dataset],
-          metrics: [analysisEntity.metric],
+    let queryRes = await (
+      await fetch(`${process.env.OBELISK_ENDPOINT}/data/query/events`, {
+        method: "POST",
+        body: JSON.stringify({
+          dataRange: {
+            datasets: [analysisEntity.result_dataset],
+            metrics: [analysisEntity.metric],
+          },
+          from: Math.min(...(analysisEntity.result_timestamps as number[])),
+          to: Math.max(...(analysisEntity.result_timestamps as number[])) + 1,
+        }),
+        headers: {
+          authorization: headers.authorization,
+          "Content-Type": "application/json",
         },
-        from: Math.min(...(analysisEntity.result_timestamps as number[])),
-        to: Math.max(...(analysisEntity.result_timestamps as number[])) + 1,
-      }),
-      headers: {
-        authorization: headers.authorization,
-        "Content-Type": "application/json",
-      },
-      signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(10000),
+      })
+    ).json();
+
+    queryRes.items = queryRes.items.filter((metric_event: any) => {
+      return metric_event.value.analysis_id === analysis_id;
     });
+
+    return queryRes;
   },
   {
     params: t.Object({
@@ -441,11 +498,12 @@ analysisController.post(
             timestamp: currentTime,
             metric: analysisEntity.metric,
             value: {
-              // TODO: We also need to store the data index (timestamp) of the encrypted data point associatiod with this result
+              // TODO: We also need to store the data index (timestamp) of the original encrypted data point associatiod with this result
               //       because if an analsysis consists of multiple data points, and the results are not combined yet, we can combine
-              //       the related shares. Otherwise, we would not know which shares are from one computation.
+              //       the related shares. Otherwise, we would not know which shares are from which computation.
               is_combined: body.is_combined != null ? body.is_combined : false,
               c_result: body.result,
+              analysis_id,
             },
             source: jwtDecoded.client_id,
           },

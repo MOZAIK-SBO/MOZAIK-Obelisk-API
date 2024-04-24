@@ -1,32 +1,38 @@
 import { Repository, Schema } from "redis-om";
 import { metadata_client } from "./metadata.client";
 
-
 const mpcPartySchema = new Schema("mpc-parties", {
-    mpc_id: { type: 'string' },
-    mpc_key: { type: 'string' },
-    host: { type: 'string' },
-    region: { type: 'string' }
+  mpc_id: { type: "string" },
+  mpc_key: { type: "string" },
+  host: { type: "string" },
+  region: { type: "string" },
 });
 
-export const mpcPartyRepository = new Repository(mpcPartySchema, metadata_client);
+export const mpcPartyRepository = new Repository(
+  mpcPartySchema,
+  metadata_client,
+);
 
-
+// TODO: add final status. I.e., when the status is completed, failed, or unkown, we should not need to fetch this status at the MPC parties.
 const analysisSchema = new Schema("analyses", {
-    user_id: { type: 'string' },
-    user_key: { type: 'string' },
-    source_dataset: { type: 'string' },
-    result_dataset: { type: 'string' },
-    metric: { type: 'string' },
-    data_index: { type: 'number[]' },
-    result_timestamps: { type: 'number[]' },
-    parties: { type: 'string[]' },
-    analysis_type: { type: 'string' },
-    created_at: { type: 'number' },
-    keys_exp_at: { type: 'number' }
+  user_id: { type: "string" },
+  user_key: { type: "string" },
+  source_dataset: { type: "string" },
+  result_dataset: { type: "string" },
+  metric: { type: "string" },
+  data_index: { type: "number[]" },
+  result_timestamps: { type: "number[]" },
+  parties: { type: "string[]" },
+  analysis_type: { type: "string" },
+  created_at: { type: "number" },
+  keys_exp_at: { type: "number" },
+  latest_status: { type: "string" },
 });
 
-export const analysisSchemaRepository = new Repository(analysisSchema, metadata_client);
+export const analysisSchemaRepository = new Repository(
+  analysisSchema,
+  metadata_client,
+);
 
 await mpcPartyRepository.createIndex();
 await analysisSchemaRepository.createIndex();

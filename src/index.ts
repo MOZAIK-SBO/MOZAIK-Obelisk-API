@@ -2,7 +2,7 @@ import { Elysia } from "elysia";
 import { initControllers } from "./controllers";
 import cors from "@elysiajs/cors";
 
-const app = new Elysia({ prefix: "/api" }).use(cors());
+export const app = new Elysia({ prefix: "/api" }).use(cors());
 
 initControllers(app);
 
