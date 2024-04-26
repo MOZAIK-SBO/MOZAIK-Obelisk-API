@@ -438,7 +438,7 @@ analysisController.get(
       };
     }
 
-    let queryRes = await (
+    const queryRes = await (
       await fetch(`${process.env.OBELISK_ENDPOINT}/data/query/events`, {
         method: "POST",
         body: JSON.stringify({
@@ -458,7 +458,7 @@ analysisController.get(
     ).json();
 
     queryRes.items = queryRes.items.filter((metric_event: any) => {
-      return metric_event.value.analysis_id === analysis_id;
+      return metric_event.value.map.analysis_id === analysis_id;
     });
 
     return queryRes;
