@@ -16,6 +16,7 @@ import { authResolver } from "../util/resolvers";
 //import https from "https";
 import { $ } from "bun";
 import { app } from "..";
+import { metadata_client } from "../redis/metadata.client";
 
 export const analysisController = new Elysia({ prefix: "/analysis" })
   .use(bearer())
@@ -516,9 +517,12 @@ analysisController.post(
       },
     );
 
-    // Store the result timestamp
-    (analysisEntity.result_timestamps as number[]).push(currentTime);
-    await analysisSchemaRepository.save(analysisEntity);
+    // Atomically store the result timestamp
+    await metadata_client.json.arrAppend(
+      `analyses:${analysis_id}`,
+      ".result_timestamps",
+      currentTime,
+    );
 
     return ingestResponse;
   },
