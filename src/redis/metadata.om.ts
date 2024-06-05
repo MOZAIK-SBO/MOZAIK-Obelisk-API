@@ -13,7 +13,6 @@ export const mpcPartyRepository = new Repository(
   metadata_client,
 );
 
-// TODO: add final status. I.e., when the status is completed, failed, or unkown, we should not need to fetch this status at the MPC parties.
 const analysisSchema = new Schema("analyses", {
   user_id: { type: "string" },
   user_key: { type: "string" },

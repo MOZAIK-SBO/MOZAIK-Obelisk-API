@@ -159,6 +159,71 @@ analysisController.post(
   },
 );
 
+analysisController.post(
+  "/fhe/prepare",
+  async ({ body, jwtDecoded }) => {
+    const currentTime = Date.now();
+
+    const analysisEntity = await analysisSchemaRepository.save({
+      user_id: jwtDecoded.client_id,
+      user_key: body.user_key,
+      source_dataset: body.data.source,
+      result_dataset: body.data.result,
+      metric: body.data.metric,
+      data_index: body.data.index,
+      result_timestamps: [],
+      parties: ["fhe"],
+      analysis_type: body.analysis_type,
+      created_at: currentTime,
+      keys_exp_at: 2524608000000,
+      latest_status: "Queued",
+    });
+
+    const responseText = await $`curl \
+                                          -H "Content-Type: application/json" \
+                                          -X POST \
+                                          -d '${JSON.stringify({
+                                            analysis_id:
+                                              analysisEntity[EntityId]!,
+                                            user_id: jwtDecoded.client_id,
+                                            data_index: body.data.index,
+                                            analysis_type: body.analysis_type,
+                                          })}' \
+                                          -L http://10.10.168.50/analyse/`.text();
+
+    try {
+      const response = JSON.parse(responseText);
+
+      if (response.error != null) {
+        throw new InternalServerError(
+          JSON.stringify({ fhe_error: response.error }),
+        );
+      }
+    } catch (e: any) {
+      throw new InternalServerError(
+        JSON.stringify({ error: e, raw_response: responseText }),
+      );
+    }
+
+    return { analysis_id: analysisEntity[EntityId]! };
+  },
+  {
+    headers: t.Object({
+      authorization: t.String({ description: "JWT Bearer token." }),
+    }),
+    body: "PrepareFheAnalysis",
+    response: {
+      200: t.Object({ analysis_id: t.String() }),
+      500: t.Any(),
+    },
+    detail: {
+      tags: ["Analysis"],
+      description:
+        "Prepare a FHE analysis. This will create an analysis ID and queue the computation on the FHE computation server.",
+    },
+  },
+);
+
 analysisController.get(
   "/",
   async ({ jwtDecoded, headers }) => {
@@ -234,7 +299,7 @@ analysisController.get(
     },
     detail: {
       tags: ["Analysis"],
-      description: "Get list of all analysis from this user.",
+      description: "Get list of all analyses from this user.",
     },
   },
 );
@@ -256,7 +321,8 @@ async function fetchAnalysisEntity(
   return analysisEntity;
 }
 
-// Called by user if needed. Dashboard does not use this. Dashboard uses the status from the metadata database.
+// Called by API if needed (user calls GET /analyis and that call delegates to this one if needed).
+// Dashboard does not use this directly. Dashboard uses the status from the metadata database.
 analysisController.get(
   "/status/:analysis_id",
   async ({ params: { analysis_id }, jwtDecoded }) => {
@@ -267,77 +333,97 @@ analysisController.get(
 
     const res: {
       statuses: {
-        mpc_id: string;
+        server_id: string;
         status: string;
       }[];
     } = {
       statuses: [],
     };
 
-    for (const party of analysisEntity.parties as string[]) {
-      const registeredParty = (await mpcPartyRepository
-        .search()
-        .where("mpc_id")
-        .equals(party)
-        .return.first())!;
-
-      // Bug in Bun: https://github.com/oven-sh/bun/issues/6940
-      // Use curl as a temp "fix"
-
-      // await new Promise<void>(async (resolve, reject) => {
-      //   const request = https.request(
-      //     {
-      //       host: `${registeredParty.host}/status/${analysis_id}`,
-      //       method: "GET",
-      //       signal: AbortSignal.timeout(5000),
-      //       cert: await Bun.file(
-      //         `${import.meta.dir}/../../certs/api.crt`,
-      //       ).text(),
-      //       key: await Bun.file(
-      //         `${import.meta.dir}/../../certs/api.key`,
-      //       ).text(),
-      //       ca: await Bun.file(
-      //         `${import.meta.dir}/../../certs/mpc-ca.crt`,
-      //       ).text(),
-      //     },
-      //     (response) => {
-      //       response.on("data", (d) => {
-      //         console.log(d);
-      //         res.statuses.push({
-      //           mpc_id: party,
-      //           status: d,
-      //         });
-      //
-      //         resolve();
-      //       });
-      //     },
-      //   );
-      //
-      //   request.on("error", (e) => {
-      //     console.log(e);
-      //     reject(e);
-      //   });
-      //   request.end();
-      // });
+    if ((analysisEntity.parties as string[])[0] === "fhe") {
+      // FHE analysis
 
       const response = JSON.parse(
-        await $`curl \
-                      --cert ${import.meta.dir}/../../certs/api.crt \
-                      --key ${import.meta.dir}/../../certs/api.key \
-                      --cacert ${import.meta.dir}/../../certs/mpc-ca.crt \
-                      -L ${registeredParty.host}/status/${analysis_id}`.text(),
+        await $`curl -L http://10.10.168.50/status/${analysis_id}`.text(),
       );
 
       if (response.error != null) {
         throw new InternalServerError(
-          JSON.stringify({ mpc_error: response.error }),
+          JSON.stringify({ fhe_error: response.error }),
         );
       }
 
       res.statuses.push({
-        mpc_id: party,
+        server_id: "fhe",
         status: response.type,
       });
+    } else {
+      // MPC analysis
+      for (const party of analysisEntity.parties as string[]) {
+        const registeredParty = (await mpcPartyRepository
+          .search()
+          .where("mpc_id")
+          .equals(party)
+          .return.first())!;
+
+        // Bug in Bun: https://github.com/oven-sh/bun/issues/6940
+        // Use curl as a temp "fix"
+
+        // await new Promise<void>(async (resolve, reject) => {
+        //   const request = https.request(
+        //     {
+        //       host: `${registeredParty.host}/status/${analysis_id}`,
+        //       method: "GET",
+        //       signal: AbortSignal.timeout(5000),
+        //       cert: await Bun.file(
+        //         `${import.meta.dir}/../../certs/api.crt`,
+        //       ).text(),
+        //       key: await Bun.file(
+        //         `${import.meta.dir}/../../certs/api.key`,
+        //       ).text(),
+        //       ca: await Bun.file(
+        //         `${import.meta.dir}/../../certs/mpc-ca.crt`,
+        //       ).text(),
+        //     },
+        //     (response) => {
+        //       response.on("data", (d) => {
+        //         console.log(d);
+        //         res.statuses.push({
+        //           mpc_id: party,
+        //           status: d,
+        //         });
+        //
+        //         resolve();
+        //       });
+        //     },
+        //   );
+        //
+        //   request.on("error", (e) => {
+        //     console.log(e);
+        //     reject(e);
+        //   });
+        //   request.end();
+        // });
+
+        const response = JSON.parse(
+          await $`curl \
+                      --cert ${import.meta.dir}/../../certs/api.crt \
+                      --key ${import.meta.dir}/../../certs/api.key \
+                      --cacert ${import.meta.dir}/../../certs/mpc-ca.crt \
+                      -L ${registeredParty.host}/status/${analysis_id}`.text(),
+        );
+
+        if (response.error != null) {
+          throw new InternalServerError(
+            JSON.stringify({ mpc_error: response.error }),
+          );
+        }
+
+        res.statuses.push({
+          server_id: party,
+          status: response.type,
+        });
+      }
     }
 
     return res;
@@ -353,7 +439,7 @@ analysisController.get(
       200: t.Object({
         statuses: t.Array(
           t.Object({
-            mpc_id: t.String(),
+            server_id: t.String(),
             status: t.String(),
           }),
         ),
@@ -368,7 +454,7 @@ analysisController.get(
   },
 );
 
-// Called by MPC parties
+// Called by MPC parties / FHE computation servers
 analysisController.post(
   "/data/query/:analysis_id",
   async ({ params: { analysis_id }, headers, body }) => {
@@ -392,13 +478,19 @@ analysisController.post(
     })
       .then((res) => res.json())
       .then((data) => {
+        const isFhe = (analysisEntity.parties as string[])[0] === "fhe";
+
         return {
           user_data: data.items.map((item: any) => {
-            return item.value.map.c.reduce(
-              (acc: string, byte: number) =>
-                acc + byte.toString(16).padStart(2, "0"),
-              "",
-            );
+            if (isFhe) {
+              return item.value.map.c;
+            } else {
+              return item.value.map.c.reduce(
+                (acc: string, byte: number) =>
+                  acc + byte.toString(16).padStart(2, "0"),
+                "",
+              );
+            }
           }),
         };
       });
@@ -482,7 +574,7 @@ analysisController.get(
   },
 );
 
-// Called by MPC parties
+// Called by MPC parties / FHE computation server
 analysisController.post(
   "/result/:analysis_id",
   async ({ params: { analysis_id }, jwtDecoded, headers, body }) => {

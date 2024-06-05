@@ -35,6 +35,28 @@ const PrepareMpcAnalysis = t.Object({
   }),
 });
 
+const PrepareFheAnalysis = t.Object({
+  user_key: t.String({ description: "The user's public key." }),
+  data: t.Object({
+    source: t.String({
+      description: "The source dataset with encrypted IoT data.",
+    }),
+    result: t.String({
+      description: "The result dataset where the result needs to be stored.",
+    }),
+    metric: t.String({
+      description:
+        "The name and type of the metric. E.g., this can be 'ecg::json' for ECG data.",
+    }),
+    index: t.Array(t.Numeric(), {
+      description: "Array of timestamps of the encrypted data points.",
+    }),
+  }),
+  analysis_type: t.String({
+    description: "The model that needs to be used in MPC.",
+  }),
+});
+
 const FetchAnalysisData = t.Object({
   user_id: t.String({ description: "User id associated with the analysis." }),
   data_index: t.Array(t.Numeric(), {
@@ -71,12 +93,14 @@ const AnalysisEntity = t.Object({
   analysis_type: t.String(),
   created_at: t.Number(),
   keys_exp_at: t.Number(),
+  latest_status: t.String(),
 });
 
 export const AnalysisEntities = t.Array(AnalysisEntity);
 
 export const analysisModel = new Elysia({ name: "analysisModel" }).model({
   PrepareMpcAnalysis,
+  PrepareFheAnalysis,
   FetchAnalysisData,
   StoreAnalysisResult,
   MpcQueryDataResult,
