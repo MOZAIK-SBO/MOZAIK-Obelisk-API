@@ -190,7 +190,7 @@ analysisController.post(
       data_index: body.data.index,
       analysis_type: body.analysis_type,
     })}' \
-                                          -L http://10.10.168.50/analyse/`.text();
+                                          -L http://10.10.168.50:8080/analyse/`.text();
 
     try {
       const response = JSON.parse(responseText);
@@ -345,7 +345,7 @@ analysisController.get(
       // FHE analysis
 
       const response = JSON.parse(
-        await $`curl -L http://10.10.168.50/status/${analysis_id}`.text(),
+        await $`curl -L http://10.10.168.50:8080/status/${analysis_id}`.text(),
       );
 
       if (response.error != null) {
