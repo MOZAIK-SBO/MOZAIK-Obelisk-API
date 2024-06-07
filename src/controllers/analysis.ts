@@ -17,6 +17,7 @@ import { authResolver } from "../util/resolvers";
 import { $ } from "bun";
 import { app } from "..";
 import { metadata_client } from "../redis/metadata.client";
+import { FheEvent, FheResult } from "../mongo/fhe.schema";
 
 export const analysisController = new Elysia({ prefix: "/analysis" })
   .use(bearer())
@@ -116,13 +117,13 @@ analysisController.post(
                                           -H "Content-Type: application/json" \
                                           -X POST \
                                           -d '${JSON.stringify({
-                                            analysis_id:
-                                              analysisEntity[EntityId]!,
-                                            user_id: jwtDecoded.client_id,
-                                            data_index: body.data.index,
-                                            user_key: body.user_key,
-                                            analysis_type: body.analysis_type,
-                                          })}' \
+        analysis_id:
+          analysisEntity[EntityId]!,
+        user_id: jwtDecoded.client_id,
+        data_index: body.data.index,
+        user_key: body.user_key,
+        analysis_type: body.analysis_type,
+      })}' \
                                           -L ${partyEntity[index].host}/analyse/`.text();
 
       try {
@@ -183,12 +184,12 @@ analysisController.post(
                                           -H "Content-Type: application/json" \
                                           -X POST \
                                           -d '${JSON.stringify({
-                                            analysis_id:
-                                              analysisEntity[EntityId]!,
-                                            user_id: jwtDecoded.client_id,
-                                            data_index: body.data.index,
-                                            analysis_type: body.analysis_type,
-                                          })}' \
+      analysis_id:
+        analysisEntity[EntityId]!,
+      user_id: jwtDecoded.client_id,
+      data_index: body.data.index,
+      analysis_type: body.analysis_type,
+    })}' \
                                           -L http://10.10.168.50/analyse/`.text();
 
     try {
@@ -460,40 +461,42 @@ analysisController.post(
   async ({ params: { analysis_id }, headers, body }) => {
     const analysisEntity = await fetchAnalysisEntity(body.user_id, analysis_id);
 
-    return await fetch(`${process.env.OBELISK_ENDPOINT}/data/query/events`, {
-      method: "POST",
-      body: JSON.stringify({
-        dataRange: {
-          datasets: [analysisEntity.source_dataset],
-          metrics: [analysisEntity.metric],
+    if ((analysisEntity.parties as string[])[0] === "fhe") {
+      return (await FheEvent
+        .find()
+        .where("ts").gte(Math.min(...body.data_index)).lt(Math.max(...body.data_index) + 1)
+        .select("c")
+        .exec()).map(({ c }) => c);
+    } else {
+      return await fetch(`${process.env.OBELISK_ENDPOINT}/data/query/events`, {
+        method: "POST",
+        body: JSON.stringify({
+          dataRange: {
+            datasets: [analysisEntity.source_dataset],
+            metrics: [analysisEntity.metric],
+          },
+          from: Math.min(...body.data_index),
+          to: Math.max(...body.data_index) + 1,
+        }),
+        headers: {
+          authorization: headers.authorization,
+          "Content-Type": "application/json",
         },
-        from: Math.min(...body.data_index),
-        to: Math.max(...body.data_index) + 1,
-      }),
-      headers: {
-        authorization: headers.authorization,
-        "Content-Type": "application/json",
-      },
-      signal: AbortSignal.timeout(10000),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        const isFhe = (analysisEntity.parties as string[])[0] === "fhe";
-
-        return {
-          user_data: data.items.map((item: any) => {
-            if (isFhe) {
-              return item.value.map.c;
-            } else {
+        signal: AbortSignal.timeout(10000),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          return {
+            user_data: data.items.map((item: any) => {
               return item.value.map.c.reduce(
                 (acc: string, byte: number) =>
                   acc + byte.toString(16).padStart(2, "0"),
                 "",
               );
-            }
-          }),
-        };
-      });
+            }),
+          };
+        });
+    }
   },
   {
     params: t.Object({
@@ -531,30 +534,42 @@ analysisController.get(
       };
     }
 
-    const queryRes = await (
-      await fetch(`${process.env.OBELISK_ENDPOINT}/data/query/events`, {
-        method: "POST",
-        body: JSON.stringify({
-          dataRange: {
-            datasets: [analysisEntity.result_dataset],
-            metrics: [analysisEntity.metric],
+    if ((analysisEntity.parties as string[])[0] === "fhe") {
+      const fheResults = await FheResult.find()
+        .where("ts").gte(Math.min(...(analysisEntity.result_timestamps as number[]))).lt(Math.max(...(analysisEntity.result_timestamps as number[])) + 1)
+        .exec();
+
+      return {
+        items: fheResults,
+        cursor: null
+      }
+    }
+    else {
+      const queryRes = await (
+        await fetch(`${process.env.OBELISK_ENDPOINT}/data/query/events`, {
+          method: "POST",
+          body: JSON.stringify({
+            dataRange: {
+              datasets: [analysisEntity.result_dataset],
+              metrics: [analysisEntity.metric],
+            },
+            from: Math.min(...(analysisEntity.result_timestamps as number[])),
+            to: Math.max(...(analysisEntity.result_timestamps as number[])) + 1,
+          }),
+          headers: {
+            authorization: headers.authorization,
+            "Content-Type": "application/json",
           },
-          from: Math.min(...(analysisEntity.result_timestamps as number[])),
-          to: Math.max(...(analysisEntity.result_timestamps as number[])) + 1,
-        }),
-        headers: {
-          authorization: headers.authorization,
-          "Content-Type": "application/json",
-        },
-        signal: AbortSignal.timeout(10000),
-      })
-    ).json();
+          signal: AbortSignal.timeout(10000),
+        })
+      ).json();
 
-    queryRes.items = queryRes.items.filter((metric_event: any) => {
-      return metric_event.value.map.analysis_id === analysis_id;
-    });
+      queryRes.items = queryRes.items.filter((metric_event: any) => {
+        return metric_event.value.map.analysis_id === analysis_id;
+      });
 
-    return queryRes;
+      return queryRes;
+    }
   },
   {
     params: t.Object({
@@ -577,37 +592,10 @@ analysisController.get(
 // Called by MPC parties / FHE computation server
 analysisController.post(
   "/result/:analysis_id",
-  async ({ params: { analysis_id }, jwtDecoded, headers, body }) => {
+  async ({ params: { analysis_id }, jwtDecoded, headers, body, set }) => {
     const currentTime = Date.now();
 
     const analysisEntity = await fetchAnalysisEntity(body.user_id, analysis_id);
-
-    const ingestResponse = await fetch(
-      `${process.env.OBELISK_ENDPOINT}/data/ingest/${analysisEntity.result_dataset}`,
-      {
-        method: "POST",
-        body: JSON.stringify([
-          {
-            timestamp: currentTime,
-            metric: analysisEntity.metric,
-            value: {
-              // TODO: We also need to store the data index (timestamp) of the original encrypted data point associatiod with this result
-              //       because if an analsysis consists of multiple data points, and the results are not combined yet, we can combine
-              //       the related shares. Otherwise, we would not know which shares are from which computation.
-              is_combined: body.is_combined != null ? body.is_combined : false,
-              c_result: body.result,
-              analysis_id,
-            },
-            source: jwtDecoded.client_id,
-          },
-        ]),
-        headers: {
-          authorization: headers.authorization,
-          "Content-Type": "application/json",
-        },
-        signal: AbortSignal.timeout(5000),
-      },
-    );
 
     // Atomically store the result timestamp
     await metadata_client.json.arrAppend(
@@ -616,7 +604,51 @@ analysisController.post(
       currentTime,
     );
 
-    return ingestResponse;
+    if ((analysisEntity.parties as string[])[0] === "fhe") {
+      await (
+        new FheResult({
+          ts: currentTime,
+          metric: analysisEntity.metric,
+          source: jwtDecoded.client_id,
+
+          value: {
+            is_combined: true,
+            c_result: body.result,
+            analysis_id
+          }
+        })
+      ).save();
+
+      set.status = "No Content";
+      return;
+    } else {
+      return await fetch(
+        `${process.env.OBELISK_ENDPOINT}/data/ingest/${analysisEntity.result_dataset}`,
+        {
+          method: "POST",
+          body: JSON.stringify([
+            {
+              timestamp: currentTime,
+              metric: analysisEntity.metric,
+              value: {
+                // TODO: We also need to store the data index (timestamp) of the original encrypted data point associatiod with this result
+                //       because if an analsysis consists of multiple data points, and the results are not combined yet, we can combine
+                //       the related shares. Otherwise, we would not know which shares are from which computation.
+                is_combined: body.is_combined != null ? body.is_combined : false,
+                c_result: body.result,
+                analysis_id,
+              },
+              source: jwtDecoded.client_id,
+            },
+          ]),
+          headers: {
+            authorization: headers.authorization,
+            "Content-Type": "application/json",
+          },
+          signal: AbortSignal.timeout(5000),
+        },
+      );
+    }
   },
   {
     params: t.Object({

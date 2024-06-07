@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { initControllers } from "./controllers";
 import cors from "@elysiajs/cors";
+import './mongo/fhe.client';
 
 export const app = new Elysia({ prefix: "/api" }).use(cors());
 

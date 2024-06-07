@@ -1,6 +1,6 @@
 {
   "name": "mozaik-obelisk-api",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "bun run --watch src/index.ts",
@@ -12,6 +12,7 @@
     "@elysiajs/swagger": "^0.8.5",
     "elysia": "latest",
     "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.4.1",
     "redis": "^4.6.13",
     "redis-om": "^0.4.3"
   },
