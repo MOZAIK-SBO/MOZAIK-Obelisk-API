@@ -599,12 +599,7 @@ analysisController.post(
 
     const analysisEntity = await fetchAnalysisEntity(body.user_id, analysis_id);
 
-    // Atomically store the result timestamp
-    await metadata_client.json.arrAppend(
-      `analyses:${analysis_id}`,
-      ".result_timestamps",
-      currentTime,
-    );
+    let response = undefined;
 
     if ((analysisEntity.parties as string[])[0] === "fhe") {
       await (
@@ -622,9 +617,8 @@ analysisController.post(
       ).save();
 
       set.status = "No Content";
-      return;
     } else {
-      return await fetch(
+      response = await fetch(
         `${process.env.OBELISK_ENDPOINT}/data/ingest/${analysisEntity.result_dataset}`,
         {
           method: "POST",
@@ -650,6 +644,19 @@ analysisController.post(
           signal: AbortSignal.timeout(5000),
         },
       );
+    }
+
+    // Atomically store the result timestamp
+    await metadata_client.json.arrAppend(
+      `analyses:${analysis_id}`,
+      ".result_timestamps",
+      currentTime,
+    );
+
+    if (response) {
+      return response;
+    } else {
+      return;
     }
   },
   {
