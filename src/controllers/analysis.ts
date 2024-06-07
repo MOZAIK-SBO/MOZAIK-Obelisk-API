@@ -462,11 +462,13 @@ analysisController.post(
     const analysisEntity = await fetchAnalysisEntity(body.user_id, analysis_id);
 
     if ((analysisEntity.parties as string[])[0] === "fhe") {
-      return (await FheEvent
-        .find()
-        .where("ts").gte(Math.min(...body.data_index)).lt(Math.max(...body.data_index) + 1)
-        .select("c")
-        .exec()).map(({ c }) => c);
+      return {
+        user_data: (await FheEvent
+          .find()
+          .where("ts").gte(Math.min(...body.data_index)).lt(Math.max(...body.data_index) + 1)
+          .select("c")
+          .exec()).map(({ c }) => c)
+      };
     } else {
       return await fetch(`${process.env.OBELISK_ENDPOINT}/data/query/events`, {
         method: "POST",
