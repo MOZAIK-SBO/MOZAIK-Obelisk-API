@@ -542,7 +542,18 @@ analysisController.get(
         .exec();
 
       return {
-        items: fheResults,
+        items: fheResults.map(res => {
+          return {
+            ...res.toObject(),
+            timestamp: res.timestamp,
+            value: {
+              empty: false,
+              map: {
+                ...res.value
+              }
+            }
+          }
+        }),
         cursor: null
       }
     }
