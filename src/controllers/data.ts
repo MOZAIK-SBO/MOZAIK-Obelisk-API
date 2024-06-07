@@ -11,7 +11,7 @@ export const dataController = new Elysia({ prefix: "/data" })
 
 dataController.post("/ingest/:datasetId",
   async ({ params: { datasetId }, headers, body, set }) => {
-    if (body[0].metric.toLowerCase().includes("fhe")) {
+    if (datasetId.toLowerCase().includes("fhe")) {
       for (const event of body) {
         await (
           new FheEvent({
