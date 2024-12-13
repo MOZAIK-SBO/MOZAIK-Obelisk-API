@@ -6,6 +6,7 @@ import { mpcKeysController } from "./mpcKeys";
 import { analysisController } from "./analysis";
 import { dataController } from "./data";
 import { mpcPartiesController } from "./mpcParties";
+import { batchesController } from "./batches";
 
 export function initControllers(app: Elysia<any>) {
   initSwagger(app);
@@ -15,5 +16,6 @@ export function initControllers(app: Elysia<any>) {
   app.use(dataController);
   app.use(mpcKeysController);
   app.use(analysisController);
+  app.use(batchesController);
   app.use(mpcPartiesController);
 }

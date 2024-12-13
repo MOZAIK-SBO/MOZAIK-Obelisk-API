@@ -58,14 +58,15 @@ const PrepareFheAnalysis = t.Object({
 });
 
 const FetchAnalysisData = t.Object({
-  user_id: t.String({ description: "User id associated with the analysis." }),
-  data_index: t.Array(t.Numeric(), {
-    description: "Array of timestamps of the encrypted data points.",
-  }),
+  analysis_id: t.Array(t.String(), { description: "List of analysis ids." }),
+  user_id: t.Array(t.String(), { description: "User ids associated with the analyses." }),
+  data_index: t.Array(t.Array(t.Numeric()), { description: "Array of arrays of timestamps of the encrypted data points." }),
 });
 
 const StoreAnalysisResult = t.Object({
-  user_id: t.String({ description: "User id associated with the analysis." }),
+  analysis_id: t.Array(t.String(), { description: "List of analysis ids." }),
+  user_id: t.Array(t.String(), { description: "User ids associated with the analyses." }),
+  result: t.Array(t.String(), { description: "List of hex-encoded ciphertexts of the computation results." }),
   is_combined: t.Optional(
     t.Boolean({
       default: false,
@@ -73,11 +74,10 @@ const StoreAnalysisResult = t.Object({
         "For MPC: Whether the result is the combined ciphertext result generated running DistEnc (`true`), or if it is a ciphertext result share (`false`). For FHE: always `true`.",
     }),
   ),
-  result: t.String({ description: "Ciphertext of the result (share)." }),
 });
 
 export const MpcQueryDataResult = t.Object({
-  user_data: t.Array(t.String()),
+  user_data: t.Array(t.Array(t.String())),
 });
 
 const AnalysisEntity = t.Object({

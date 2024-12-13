@@ -61,9 +61,22 @@ analysisController.post(
       analysis_type: body.analysis_type,
       created_at: currentTime,
       keys_exp_at: expAt.getTime(),
-      latest_status: "Queued",
+      latest_status: "Prepared",
     });
 
+    for (const [_, party] of body.parties.entries()) {
+      const keyShareEntity = await keyShareRepository.save({
+        analysis_id: analysisEntity[EntityId]!,
+        user_id: jwtDecoded.client_id,
+        mpc_id: party.mpc_id,
+        key_share: party.key_share,
+        exp_at: expAt.getTime(),
+      });
+
+      await keyShareRepository.expireAt(keyShareEntity[EntityId]!, expAt);
+    }
+
+    /* Pre-batch implementation
     for (const [index, party] of body.parties.entries()) {
       const keyShareEntity = await keyShareRepository.save({
         analysis_id: analysisEntity[EntityId]!,
@@ -140,6 +153,7 @@ analysisController.post(
         );
       }
     }
+    */
 
     return { analysis_id: analysisEntity[EntityId]! };
   },
@@ -237,6 +251,7 @@ analysisController.get(
     analysisEntities = await Promise.all(
       analysisEntities.map(async (analysisEntity: Entity) => {
         if (
+          analysisEntity.latest_status !== "Prepared" &&
           analysisEntity.latest_status !== "Completed" &&
           analysisEntity.latest_status !== "Failed"
         ) {
@@ -322,7 +337,7 @@ async function fetchAnalysisEntity(
   return analysisEntity;
 }
 
-// Called by API if needed (user calls GET /analyis and that call delegates to this one if needed).
+// Called by API if needed (user calls GET /analysis and that call delegates to this one if needed).
 // Dashboard does not use this directly. Dashboard uses the status from the metadata database.
 analysisController.get(
   "/status/:analysis_id",
@@ -457,53 +472,62 @@ analysisController.get(
 
 // Called by MPC parties / FHE computation servers
 analysisController.post(
-  "/data/query/:analysis_id",
-  async ({ params: { analysis_id }, headers, body }) => {
-    const analysisEntity = await fetchAnalysisEntity(body.user_id, analysis_id);
+  "/data/query",
+  async ({ headers, body }) => {
+    const res_encrypted_data_points: string[][] = [];
 
-    if ((analysisEntity.parties as string[])[0] === "fhe") {
-      return {
-        user_data: (await FheEvent
-          .find()
-          .where("ts").gte(Math.min(...body.data_index)).lt(Math.max(...body.data_index) + 1)
-          .select("c")
-          .exec()).map(({ c }) => c)
-      };
-    } else {
-      return await fetch(`${process.env.OBELISK_ENDPOINT}/data/query/events`, {
-        method: "POST",
-        body: JSON.stringify({
-          dataRange: {
-            datasets: [analysisEntity.source_dataset],
-            metrics: [analysisEntity.metric],
+    for (let i = 0; i < body.analysis_id.length; i++) {
+      const analysisEntity = await fetchAnalysisEntity(body.user_id[i], body.analysis_id[i]);
+
+      if ((analysisEntity.parties as string[])[0] === "fhe") {
+        // In the FHE case, we assume only a single analysis. This analysis can contain multiple data points though.
+        return {
+          user_data: [(await FheEvent
+            .find()
+            .where("ts").gte(Math.min(...body.data_index[0])).lt(Math.max(...body.data_index[0]) + 1)
+            .select("c")
+            .exec()).map(({ c }) => c)]
+        };
+      } else {
+        const analysis_encrypted_data_points: string[] = await fetch(`${process.env.OBELISK_ENDPOINT}/data/query/events`, {
+          method: "POST",
+          body: JSON.stringify({
+            dataRange: {
+              datasets: [analysisEntity.source_dataset],
+              metrics: [analysisEntity.metric],
+            },
+            from: Math.min(...body.data_index[i]),
+            to: Math.max(...body.data_index[i]) + 1,
+          }),
+          headers: {
+            authorization: headers.authorization,
+            "Content-Type": "application/json",
           },
-          from: Math.min(...body.data_index),
-          to: Math.max(...body.data_index) + 1,
-        }),
-        headers: {
-          authorization: headers.authorization,
-          "Content-Type": "application/json",
-        },
-        signal: AbortSignal.timeout(10000),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          return {
-            user_data: data.items.map((item: any) => {
+          signal: AbortSignal.timeout(10000),
+        })
+          .then((res) => {
+            return res.json()
+          }
+          )
+          .then((data) => {
+            return data.items.map((item: any) => {
               return item.value.map.c.reduce(
                 (acc: string, byte: number) =>
                   acc + byte.toString(16).padStart(2, "0"),
                 "",
               );
-            }),
-          };
-        });
+            });
+          });
+
+        res_encrypted_data_points.push(analysis_encrypted_data_points);
+      }
     }
+
+    return {
+      user_data: res_encrypted_data_points
+    };
   },
   {
-    params: t.Object({
-      analysis_id: t.String(),
-    }),
     headers: t.Object({
       authorization: t.String({ description: "JWT Bearer token." }),
     }),
@@ -604,76 +628,76 @@ analysisController.get(
 
 // Called by MPC parties / FHE computation server
 analysisController.post(
-  "/result/:analysis_id",
-  async ({ params: { analysis_id }, jwtDecoded, headers, body, set }) => {
+  "/result",
+  async ({ jwtDecoded, headers, body, set }) => {
     const currentTime = Date.now();
 
-    const analysisEntity = await fetchAnalysisEntity(body.user_id, analysis_id);
+    for (let i = 0; i < body.analysis_id.length; i++) {
+      const analysisEntity = await fetchAnalysisEntity(body.user_id[i], body.analysis_id[i]);
 
-    let response = undefined;
+      let response = undefined;
 
-    if ((analysisEntity.parties as string[])[0] === "fhe") {
-      await (
-        new FheResult({
-          ts: currentTime,
-          metric: analysisEntity.metric,
-          source: jwtDecoded.client_id,
+      if ((analysisEntity.parties as string[])[0] === "fhe") {
+        await (
+          new FheResult({
+            ts: currentTime,
+            metric: analysisEntity.metric,
+            source: jwtDecoded.client_id,
 
-          value: {
-            is_combined: true,
-            c_result: body.result,
-            analysis_id
-          }
-        })
-      ).save();
+            value: {
+              is_combined: true,
+              c_result: body.result,
+              analysis_id: body.analysis_id[i]
+            }
+          })
+        ).save();
 
-      set.status = "No Content";
-    } else {
-      response = await fetch(
-        `${process.env.OBELISK_ENDPOINT}/data/ingest/${analysisEntity.result_dataset}`,
-        {
-          method: "POST",
-          body: JSON.stringify([
-            {
-              timestamp: currentTime,
-              metric: analysisEntity.metric,
-              value: {
-                // TODO: We also need to store the data index (timestamp) of the original encrypted data point associatiod with this result
-                //       because if an analsysis consists of multiple data points, and the results are not combined yet, we can combine
-                //       the related shares. Otherwise, we would not know which shares are from which computation.
-                is_combined: body.is_combined != null ? body.is_combined : false,
-                c_result: body.result,
-                analysis_id,
+        set.status = "No Content";
+      } else {
+        response = await fetch(
+          `${process.env.OBELISK_ENDPOINT}/data/ingest/${analysisEntity.result_dataset}`,
+          {
+            method: "POST",
+            body: JSON.stringify([
+              {
+                timestamp: currentTime,
+                metric: analysisEntity.metric,
+                value: {
+                  // TODO: We also need to store the data index (timestamp) of the original encrypted data point associated with this result
+                  //       because if an analysis consists of multiple data points, and the results are not combined yet, we can combine
+                  //       the related shares. Otherwise, we would not know which shares are from which computation.
+                  is_combined: body.is_combined != null ? body.is_combined : false,
+                  c_result: body.result,
+                  analysis_id: body.analysis_id[i]
+                },
+                source: jwtDecoded.client_id,
               },
-              source: jwtDecoded.client_id,
+            ]),
+            headers: {
+              authorization: headers.authorization,
+              "Content-Type": "application/json",
             },
-          ]),
-          headers: {
-            authorization: headers.authorization,
-            "Content-Type": "application/json",
+            signal: AbortSignal.timeout(5000),
           },
-          signal: AbortSignal.timeout(5000),
-        },
+        );
+      }
+
+      // Atomically store the result timestamp
+      await metadata_client.json.arrAppend(
+        `analyses:${body.analysis_id[i]}`,
+        ".result_timestamps",
+        currentTime,
       );
+
+      if (response) {
+        return response;
+      }
     }
 
-    // Atomically store the result timestamp
-    await metadata_client.json.arrAppend(
-      `analyses:${analysis_id}`,
-      ".result_timestamps",
-      currentTime,
-    );
-
-    if (response) {
-      return response;
-    } else {
-      return;
-    }
+    set.status = "No Content";
+    return;
   },
   {
-    params: t.Object({
-      analysis_id: t.String(),
-    }),
     headers: t.Object({
       authorization: t.String({ description: "JWT Bearer token." }),
     }),

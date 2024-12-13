@@ -33,5 +33,32 @@ export const analysisSchemaRepository = new Repository(
   metadata_client,
 );
 
+const batchInfoSchema = new Schema("batch-info", {
+  // Assume batch size of 64. This means batch size of 64 data points. Thus 64/analysis_data_point_count = |user_ids| = |analysis_ids|. This implies that 64 = |user_ids| * analysis_data_point_count
+  batch_size: { type: "number" },
+  analysis_data_point_count: { type: "number" },
+
+  analysis_ids: { type: "string[]" },
+  user_ids: { type: "string[]" },
+
+  analysis_type: { type: "string" },
+  online_only: { type: "boolean" },
+
+  // All the analyses in this batch selected the same parties
+  parties: { type: "string[]" },
+
+  created_at: { type: "number" },
+  // The analysis in this batch where the keys expires the quickest will determine first_keys_exp_at
+  first_keys_exp_at: { type: "number" },
+  // the least advanced status of all the analyses in the batch will be stored in latest_status
+  latest_status: { type: "string" },
+});
+
+export const batchInfoSchemaRepository = new Repository(
+  batchInfoSchema,
+  metadata_client,
+);
+
 await mpcPartyRepository.createIndex();
 await analysisSchemaRepository.createIndex();
+await batchInfoSchemaRepository.createIndex();
