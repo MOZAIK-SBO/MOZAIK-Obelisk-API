@@ -630,12 +630,10 @@ analysisController.get(
 analysisController.post(
   "/result",
   async ({ jwtDecoded, headers, body, set }) => {
-    const currentTime = Date.now();
-
     for (let i = 0; i < body.analysis_id.length; i++) {
-      const analysisEntity = await fetchAnalysisEntity(body.user_id[i], body.analysis_id[i]);
+      const currentTime = Date.now();
 
-      let response = undefined;
+      const analysisEntity = await fetchAnalysisEntity(body.user_id[i], body.analysis_id[i]);
 
       if ((analysisEntity.parties as string[])[0] === "fhe") {
         await (
@@ -646,7 +644,7 @@ analysisController.post(
 
             value: {
               is_combined: true,
-              c_result: body.result,
+              c_result: body.result[i],
               analysis_id: body.analysis_id[i]
             }
           })
@@ -654,7 +652,7 @@ analysisController.post(
 
         set.status = "No Content";
       } else {
-        response = await fetch(
+        const response = await fetch(
           `${process.env.OBELISK_ENDPOINT}/data/ingest/${analysisEntity.result_dataset}`,
           {
             method: "POST",
@@ -667,7 +665,7 @@ analysisController.post(
                   //       because if an analysis consists of multiple data points, and the results are not combined yet, we can combine
                   //       the related shares. Otherwise, we would not know which shares are from which computation.
                   is_combined: body.is_combined != null ? body.is_combined : false,
-                  c_result: body.result,
+                  c_result: body.result[i],
                   analysis_id: body.analysis_id[i]
                 },
                 source: jwtDecoded.client_id,
@@ -680,6 +678,10 @@ analysisController.post(
             signal: AbortSignal.timeout(5000),
           },
         );
+
+        if (response?.status === 500) {
+          return response;
+        }
       }
 
       // Atomically store the result timestamp
@@ -688,10 +690,6 @@ analysisController.post(
         ".result_timestamps",
         currentTime,
       );
-
-      if (response) {
-        return response;
-      }
     }
 
     set.status = "No Content";
