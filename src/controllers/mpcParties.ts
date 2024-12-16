@@ -3,6 +3,7 @@ import { Elysia, t } from "elysia";
 import { authResolver } from "../util/resolvers";
 import { MpcParty, mpcPartiesModel } from "../models/mpcParties.model";
 import { mpcPartyRepository } from "../redis/metadata.om";
+import { Entity } from "redis-om";
 
 export const mpcPartiesController = new Elysia({ prefix: "/mpc/parties" })
   .use(bearer())
@@ -12,7 +13,7 @@ export const mpcPartiesController = new Elysia({ prefix: "/mpc/parties" })
 mpcPartiesController.get(
   "/",
   async () => {
-    return await mpcPartyRepository.search().return.all();
+    return (await mpcPartyRepository.search().return.all()).sort((a: Entity, b: Entity) => (a.mpc_id as string).localeCompare(b.mpc_id as string));
   },
   {
     headers: t.Object({
