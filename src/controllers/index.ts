@@ -7,6 +7,7 @@ import { analysisController } from "./analysis";
 import { dataController } from "./data";
 import { mpcPartiesController } from "./mpcParties";
 import { batchesController } from "./batches";
+import { streamingController } from "./streaming";
 
 export function initControllers(app: Elysia<any>) {
   initSwagger(app);
@@ -17,5 +18,6 @@ export function initControllers(app: Elysia<any>) {
   app.use(mpcKeysController);
   app.use(analysisController);
   app.use(batchesController);
+  app.use(streamingController);
   app.use(mpcPartiesController);
 }

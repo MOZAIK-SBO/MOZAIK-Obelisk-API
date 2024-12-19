@@ -3,59 +3,164 @@ import { Elysia, t } from "elysia";
 import { authResolver } from "../util/resolvers";
 import { EventsQueryResult, obeliskModel } from "../models/obelisk.model";
 import { FheEvent } from "../mongo/fhe.schema";
+import { streamingInfoSchemaRepository } from "../redis/metadata.om";
+import { app } from "..";
+import { metadata_client } from "../redis/metadata.client";
+import { EntityId } from "redis-om";
 
 export const dataController = new Elysia({ prefix: "/data" })
   .use(bearer())
   .use(obeliskModel)
   .resolve(authResolver);
 
-dataController.post("/ingest/:datasetId",
-  async ({ params: { datasetId }, headers, body, set }) => {
-    if (datasetId.toLowerCase().includes("fhe")) {
-      for (const event of body) {
-        await (
-          new FheEvent({
-            ts: Date.now(),
-            source: event.source,
-            metric: event.metric,
-            c: event.value.c
-          })
-        ).save();
+dataController
+  .post("/ingest/:datasetId",
+    async ({ params: { datasetId }, headers, body, set }) => {
+      if (datasetId.toLowerCase().includes("fhe")) {
+        for (const event of body) {
+          await (
+            new FheEvent({
+              ts: Date.now(),
+              source: event.source,
+              metric: event.metric,
+              c: event.value.c
+            })
+          ).save();
+        }
+
+        set.status = "No Content";
+
+        return;
+      } else {
+        if (body[0].timestamp == undefined) {
+          body[0].timestamp = Date.now();
+        }
+
+        return await fetch(
+          `${process.env.OBELISK_ENDPOINT}/data/ingest/${datasetId}`,
+          {
+            method: "POST",
+            body: JSON.stringify(body),
+            headers: {
+              "authorization": headers.authorization,
+              "Content-Type": "application/json",
+            }
+          }
+        );
       }
+    }, {
+    async onResponse({ set, body, headers }) {
+      if (set.status != null && (set.status === 200 || set.status === 204)) {
+        let streamingInfoEntity = await streamingInfoSchemaRepository.search().return.first();
 
-      set.status = "No Content";
+        // Check if currently streaming
+        if (streamingInfoEntity != null) {
+          const hours_til_exp = ((streamingInfoEntity.keys_exp_at as number) - Date.now()) / (1000 * 60 * 60);
 
-      return;
-    } else {
-      return await fetch(
-        `${process.env.OBELISK_ENDPOINT}/data/ingest/${datasetId}`,
-        {
-          method: "POST",
-          body: JSON.stringify(body),
-          headers: {
-            "authorization": headers.authorization,
-            "Content-Type": "application/json",
+          // Prepare an analysis
+          const prepared_analysis = await fetch(
+            `${app.server!.url.origin}/api/analysis/mpc/prepare`,
+            {
+              method: "POST",
+              body: JSON.stringify({
+                parties: [
+                  {
+                    mpc_id: "mpc1",
+                    key_share: (streamingInfoEntity.key_shares as string[])[0]
+                  },
+                  {
+                    mpc_id: "mpc2",
+                    key_share: (streamingInfoEntity.key_shares as string[])[1]
+                  },
+                  {
+                    mpc_id: "mpc3",
+                    key_share: (streamingInfoEntity.key_shares as string[])[2]
+                  }
+                ],
+                exp_hours: hours_til_exp,
+                data: {
+                  source: streamingInfoEntity.source as string,
+                  result: streamingInfoEntity.result as string,
+                  metric: body[0].metric,
+                  index: [body[0].timestamp]
+                },
+                analysis_type: streamingInfoEntity.analysis_type as string,
+                user_key: ""
+              }),
+              headers: {
+                authorization: headers.authorization,
+                "Content-Type": "application/json",
+              },
+              signal: AbortSignal.timeout(10000),
+            }).then((res) => {
+              return res.json()
+            });
+
+
+          // Add analysis id to streaming info
+          await metadata_client.json.arrAppend(
+            `streaming-info:${streamingInfoEntity[EntityId]!}`,
+            ".current_analysis_ids",
+            prepared_analysis.analysis_id
+          );
+
+          // Check if we need to submit a batch
+          const submitBatch = (streamingInfoEntity.current_analysis_ids as string[]).length + 1 >= (streamingInfoEntity.batch_size as number);
+
+          if (submitBatch) {
+            streamingInfoEntity = await streamingInfoSchemaRepository.search().return.first();
+
+            if (streamingInfoEntity != null) {
+              const batch_analysis_ids = (streamingInfoEntity.current_analysis_ids as string[]).slice(0, (streamingInfoEntity.batch_size as number));
+
+              // Remove these analysis ids from streaming info
+              await metadata_client.json.arrTrim(
+                `streaming-info:${streamingInfoEntity[EntityId]!}`,
+                ".current_analysis_ids",
+                (streamingInfoEntity.batch_size as number),
+                -1
+              );
+
+              // Submit batch
+              await fetch(
+                `${app.server!.url.origin}/api/batches`,
+                {
+                  method: "POST",
+                  body: JSON.stringify({
+                    batch_size: streamingInfoEntity.batch_size as number,
+                    analysis_data_point_count: 1,
+                    analysis_ids: batch_analysis_ids,
+                    analysis_type: streamingInfoEntity.analysis_type as string
+                  }),
+                  headers: {
+                    authorization: headers.authorization,
+                    "Content-Type": "application/json",
+                  },
+                  signal: AbortSignal.timeout(10000),
+                }).then((res) => {
+                  return res.json()
+                });
+            }
           }
         }
-      );
+      }
+    },
+    params: t.Object({
+      datasetId: t.String()
+    }),
+    headers: t.Object({
+      authorization: t.String({ description: "JWT Bearer token." })
+    }),
+    body: "MozaikIngestBatch",
+    response: {
+      204: t.Undefined(),
+      500: t.Any()
+    },
+    detail: {
+      tags: ["Data"],
+      description: "Abstraction layer to ingest encrypted data into Obelisk."
     }
-  }, {
-  params: t.Object({
-    datasetId: t.String()
-  }),
-  headers: t.Object({
-    authorization: t.String({ description: "JWT Bearer token." })
-  }),
-  body: "MozaikIngestBatch",
-  response: {
-    204: t.Undefined(),
-    500: t.Any()
-  },
-  detail: {
-    tags: ["Data"],
-    description: "Abstraction layer to ingest encrypted data into Obelisk."
-  }
-});
+  });
 
 dataController.post("/query",
   async ({ headers, body }) => {

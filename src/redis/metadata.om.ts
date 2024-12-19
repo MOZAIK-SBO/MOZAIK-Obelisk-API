@@ -50,7 +50,7 @@ const batchInfoSchema = new Schema("batch-info", {
   created_at: { type: "number" },
   // The analysis in this batch where the keys expires the quickest will determine first_keys_exp_at
   first_keys_exp_at: { type: "number" },
-  // the least advanced status of all the analyses in the batch will be stored in latest_status
+  // The least advanced status of all the analyses in the batch will be stored in latest_status
   latest_status: { type: "string" },
 });
 
@@ -59,6 +59,27 @@ export const batchInfoSchemaRepository = new Repository(
   metadata_client,
 );
 
+const streamingInfoSchema = new Schema('streaming-info', {
+  analysis_type: { type: "string" },
+  batch_size: { type: "number" },
+  key_shares: { type: "string[]" },
+  keys_exp_at: { type: "number" },
+  source: { type: "string" },
+  result: { type: "string" },
+
+  // History of all the batches that have been submitted during this streaming session
+  submitted_batches: { type: "string[]" },
+
+  // In the streaming scenario, the batch size will be equal to the amount of analyses in the batch (1 data point per analysis)
+  current_analysis_ids: { type: "string[]" }
+});
+
+export const streamingInfoSchemaRepository = new Repository(
+  streamingInfoSchema,
+  metadata_client
+);
+
 await mpcPartyRepository.createIndex();
 await analysisSchemaRepository.createIndex();
 await batchInfoSchemaRepository.createIndex();
+await streamingInfoSchemaRepository.createIndex();
