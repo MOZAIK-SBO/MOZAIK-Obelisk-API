@@ -15,6 +15,14 @@ const SubmitBatch = t.Object({
             default: false,
             description: "If this batched computation should only run the online phase. This means that the offline pre-processing phase has already been done (by calling GET /offline on the involved MPC parties). If this flag is set to true, but pre-processing was not performed, the batched computation will fail. Defaults to `false`."
         })
+    ),
+    streaming: t.Optional(
+        t.Array(
+            t.Array(t.Numeric()),
+            {
+                description: "Optional parameter to indicate this batch was generated in a streaming scenario. This parameter contains a list of lists in the following format: `[[start_time, end_time], ...]`, where each `start_time` is the start time a certain user enabled streaming, `end_time` when the streaming expires."
+            }
+        ),
     )
 });
 

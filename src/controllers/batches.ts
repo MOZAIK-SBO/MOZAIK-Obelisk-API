@@ -220,19 +220,26 @@ batchesController.post(
         });
 
         for (let i = 0; i < parties.length; i++) {
+            const body_obj = {
+                analysis_id: body.analysis_ids,
+                user_id: user_ids,
+                data_index: data_indexes,
+                streaming: body.streaming,
+                analysis_type: body.analysis_type,
+                online_only: body.online_only != null ? body.online_only : false
+            };
+
+            if (!body_obj.streaming) {
+                delete body_obj.streaming;
+            }
+
             const responseText = await $`curl \
             --cert ${import.meta.dir}/../../certs/api.crt \
             --key ${import.meta.dir}/../../certs/api.key \
             --cacert ${import.meta.dir}/../../certs/mpc-ca.crt \
             -H "Content-Type: application/json" \
             -X POST \
-            -d '${JSON.stringify({
-                analysis_id: body.analysis_ids,
-                user_id: user_ids,
-                data_index: data_indexes,
-                analysis_type: body.analysis_type,
-                online_only: body.online_only != null ? body.online_only : false
-            })}' \
+            -d '${JSON.stringify(body_obj)}' \
             -L ${partyEntity[i].host}/analyse/`.text();
 
             try {

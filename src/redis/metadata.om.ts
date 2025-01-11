@@ -63,6 +63,7 @@ const streamingInfoSchema = new Schema('streaming-info', {
   analysis_type: { type: "string" },
   batch_size: { type: "number" },
   key_shares: { type: "string[]" },
+  start_time: { type: "number" },
   keys_exp_at: { type: "number" },
   source: { type: "string" },
   result: { type: "string" },

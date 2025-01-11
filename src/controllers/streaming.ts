@@ -58,6 +58,7 @@ streamingController.post(
             analysis_type: body.analysis_type,
             batch_size: body.batch_size,
             key_shares: body.key_shares,
+            start_time: body.start_time,
             keys_exp_at: body.keys_exp_at,
             source: body.source,
             result: body.result,
