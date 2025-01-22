@@ -712,3 +712,34 @@ analysisController.post(
     },
   },
 );
+
+analysisController.post(
+  "/cleanup",
+  async ({ set }) => {
+    const analyses = await analysisSchemaRepository.search().return.all();
+
+    const ids: string[] = [];
+
+    for (const analysis of analyses) {
+      ids.push(analysis[EntityId]!);
+    }
+
+    await analysisSchemaRepository.remove(ids);
+
+    set.status = "No Content";
+    return;
+  }
+  , {
+    headers: t.Object({
+      authorization: t.String({ description: "JWT Bearer token." }),
+    }),
+    response: {
+      204: t.Undefined(),
+      500: t.Any(),
+    },
+    detail: {
+      tags: ["Analysis"],
+      description: "DESTRUCTIVE! Remove all analyses to clean-up db.",
+    },
+  }
+);

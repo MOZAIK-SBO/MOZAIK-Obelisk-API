@@ -277,3 +277,34 @@ batchesController.post(
         },
     }
 );
+
+batchesController.post(
+    "/cleanup",
+    async ({ set }) => {
+        const batches = await batchInfoSchemaRepository.search().return.all();
+
+        const ids: string[] = [];
+
+        for (const batch of batches) {
+            ids.push(batch[EntityId]!);
+        }
+
+        await batchInfoSchemaRepository.remove(ids);
+
+        set.status = "No Content";
+        return;
+    }
+    , {
+        headers: t.Object({
+            authorization: t.String({ description: "JWT Bearer token." }),
+        }),
+        response: {
+            204: t.Undefined(),
+            500: t.Any(),
+        },
+        detail: {
+            tags: ["Batches"],
+            description: "DESTRUCTIVE! Remove all batches to clean-up db.",
+        },
+    }
+);
