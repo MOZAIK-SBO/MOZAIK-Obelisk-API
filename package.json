@@ -1,6 +1,6 @@
 {
   "name": "mozaik-obelisk-api",
-  "version": "0.6.7",
+  "version": "0.6.10",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "bun run --watch src/index.ts",

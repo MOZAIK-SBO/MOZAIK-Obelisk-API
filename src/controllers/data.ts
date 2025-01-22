@@ -85,7 +85,8 @@ dataController
                   index: [body[0].timestamp]
                 },
                 analysis_type: streamingInfoEntity.analysis_type as string,
-                user_key: ""
+                user_key: "",
+                invoker: "streaming"
               }),
               headers: {
                 authorization: headers.authorization,

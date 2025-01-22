@@ -26,6 +26,9 @@ const analysisSchema = new Schema("analyses", {
   created_at: { type: "number" },
   keys_exp_at: { type: "number" },
   latest_status: { type: "string" },
+
+  // Who created this analysis: 'manual' or 'streaming'
+  invoker: { type: "string" },
 });
 
 export const analysisSchemaRepository = new Repository(
@@ -46,6 +49,9 @@ const batchInfoSchema = new Schema("batch-info", {
 
   // All the analyses in this batch selected the same parties
   parties: { type: "string[]" },
+
+  // Who invoked this batch: 'manual' or 'streaming'
+  invoker: { type: "string" },
 
   created_at: { type: "number" },
   // The analysis in this batch where the keys expires the quickest will determine first_keys_exp_at

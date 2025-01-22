@@ -217,6 +217,7 @@ batchesController.post(
             created_at: currentTime,
             first_keys_exp_at,
             latest_status: "Queued",
+            invoker: body.streaming ? "streaming" : "manual"
         });
 
         for (let i = 0; i < parties.length; i++) {

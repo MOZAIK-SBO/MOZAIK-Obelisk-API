@@ -33,6 +33,7 @@ const PrepareMpcAnalysis = t.Object({
   analysis_type: t.String({
     description: "The model that needs to be used in MPC.",
   }),
+  invoker: t.Optional(t.String({ description: "Who created this analysis: 'manual' or 'streaming'. Defaults to 'manual'.", default: "manual" }))
 });
 
 const PrepareFheAnalysis = t.Object({
@@ -55,6 +56,7 @@ const PrepareFheAnalysis = t.Object({
   analysis_type: t.String({
     description: "The model that needs to be used in MPC.",
   }),
+  invoker: t.String({ description: "Who created this analysis: 'manual' or 'streaming'. Defaults to 'manual'.", default: "manual" })
 });
 
 const FetchAnalysisData = t.Object({
@@ -94,6 +96,7 @@ const AnalysisEntity = t.Object({
   created_at: t.Number(),
   keys_exp_at: t.Number(),
   latest_status: t.String(),
+  invoker: t.String()
 });
 
 export const AnalysisEntities = t.Array(AnalysisEntity);

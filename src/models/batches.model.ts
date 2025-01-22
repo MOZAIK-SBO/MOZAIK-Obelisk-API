@@ -38,6 +38,7 @@ const BatchInfoEntity = t.Object({
     created_at: t.Number(),
     first_keys_exp_at: t.Number(),
     latest_status: t.String(),
+    invoker: t.String()
 });
 
 export const BatchInfoEntities = t.Array(BatchInfoEntity);

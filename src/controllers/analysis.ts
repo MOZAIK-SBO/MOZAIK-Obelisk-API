@@ -62,6 +62,7 @@ analysisController.post(
       created_at: currentTime,
       keys_exp_at: expAt.getTime(),
       latest_status: "Prepared",
+      invoker: body.invoker ? body.invoker : "manual"
     });
 
     for (const [_, party] of body.parties.entries()) {
@@ -192,6 +193,7 @@ analysisController.post(
       created_at: currentTime,
       keys_exp_at: 2524608000000,
       latest_status: "Queued",
+      invoker: body.invoker ? body.invoker : "manual"
     });
 
     const responseText = await $`curl \
