@@ -123,35 +123,38 @@ dataController
               );
 
               // Submit batch
-              await fetch(
-                `${app.server!.url.origin}/api/batches`,
-                {
-                  method: "POST",
-                  body: JSON.stringify({
-                    batch_size: streamingInfoEntity.batch_size as number,
-                    analysis_data_point_count: 1,
-                    analysis_ids: batch_analysis_ids,
-                    analysis_type: streamingInfoEntity.analysis_type as string,
-                    streaming: Array.from(
-                      { length: streamingInfoEntity.batch_size as number },
-                      () => [streamingInfoEntity!.start_time as number, streamingInfoEntity!.keys_exp_at as number]
-                    )
-                  }),
-                  headers: {
-                    authorization: headers.authorization,
-                    "Content-Type": "application/json",
-                  },
-                  signal: AbortSignal.timeout(10000),
-                }).then((res) => {
-                  return res.json()
-                }).then(async (data) => {
-                  // Add batch id to streaming info
-                  await metadata_client.json.arrAppend(
-                    `streaming-info:${streamingInfoEntity![EntityId]!}`,
-                    ".submitted_batches",
-                    data.batch_info_id
-                  );
-                });
+              setTimeout(async () => {
+                await fetch(
+                  `${app.server!.url.origin}/api/batches`,
+                  {
+                    method: "POST",
+                    body: JSON.stringify({
+                      batch_size: streamingInfoEntity!.batch_size as number,
+                      analysis_data_point_count: 1,
+                      analysis_ids: batch_analysis_ids,
+                      analysis_type: streamingInfoEntity!.analysis_type as string,
+                      streaming: Array.from(
+                        { length: streamingInfoEntity!.batch_size as number },
+                        () => [streamingInfoEntity!.start_time as number, streamingInfoEntity!.keys_exp_at as number]
+                      )
+                    }),
+                    headers: {
+                      authorization: headers.authorization,
+                      "Content-Type": "application/json",
+                    },
+                    signal: AbortSignal.timeout(10000),
+                  }).then((res) => {
+                    return res.json()
+                  }).then(async (data) => {
+                    // Add batch id to streaming info
+                    await metadata_client.json.arrAppend(
+                      `streaming-info:${streamingInfoEntity![EntityId]!}`,
+                      ".submitted_batches",
+                      data.batch_info_id
+                    );
+                  });
+              }, 500);
+
             }
           }
         }
