@@ -69,8 +69,7 @@ streamingController.post(
         const expAt = new Date(body.keys_exp_at);
         await streamingInfoSchemaRepository.expireAt(streamingInfoEntity[EntityId]!, expAt);
 
-        set.status = "No Content";
-        return;
+        return { stream_id: streamingInfoEntity[EntityId]! };
     },
     {
         headers: t.Object({
@@ -78,7 +77,7 @@ streamingController.post(
         }),
         body: "StartStreaming",
         response: {
-            204: t.Any(),
+            200: t.Object({ stream_id: t.String() }),
             500: t.Any(),
         },
         detail: {
