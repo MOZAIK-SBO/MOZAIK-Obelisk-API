@@ -478,51 +478,87 @@ analysisController.post(
   async ({ headers, body }) => {
     const res_encrypted_data_points: string[][] = [];
 
+    const datasets: string[] = [];
+    const metrics: string[] = [];
+    const dataTimestamps: number[][] = [];
+
+    let is_fhe = false;
+
     for (let i = 0; i < body.analysis_id.length; i++) {
       const analysisEntity = await fetchAnalysisEntity(body.user_id[i], body.analysis_id[i]);
 
       if ((analysisEntity.parties as string[])[0] === "fhe") {
-        // In the FHE case, we assume only a single analysis. This analysis can contain multiple data points though.
-        return {
-          user_data: [(await FheEvent
-            .find()
-            .where("ts").gte(Math.min(...body.data_index[0])).lt(Math.max(...body.data_index[0]) + 1)
-            .select("c")
-            .exec()).map(({ c }) => c)]
-        };
-      } else {
-        const analysis_encrypted_data_points: string[] = await fetch(`${process.env.OBELISK_ENDPOINT}/data/query/events`, {
-          method: "POST",
-          body: JSON.stringify({
-            dataRange: {
-              datasets: [analysisEntity.source_dataset],
-              metrics: [analysisEntity.metric],
-            },
-            from: Math.min(...body.data_index[i]),
-            to: Math.max(...body.data_index[i]) + 1,
-          }),
-          headers: {
-            authorization: headers.authorization,
-            "Content-Type": "application/json",
-          },
-          signal: AbortSignal.timeout(10000),
-        })
-          .then((res) => {
-            return res.json()
-          }
-          )
-          .then((data) => {
-            return data.items.map((item: any) => {
-              return item.value.map.c.reduce(
-                (acc: string, byte: number) =>
-                  acc + byte.toString(16).padStart(2, "0"),
-                "",
-              );
-            });
-          });
-
-        res_encrypted_data_points.push(analysis_encrypted_data_points);
+        is_fhe = true;
       }
+
+      datasets.push(analysisEntity.source_dataset as string);
+      metrics.push(analysisEntity.metric as string);
+      dataTimestamps.push(body.data_index[i]);
+    }
+
+    if (is_fhe) {
+      // In the FHE case, we assume only a single analysis. This analysis can contain multiple data points though.
+      return {
+        user_data: [(await FheEvent
+          .find()
+          .where("ts").gte(Math.min(...body.data_index[0])).lt(Math.max(...body.data_index[0]) + 1)
+          .select("c")
+          .exec()).map(({ c }) => c)]
+      };
+    }
+
+    type QueryResult = {
+      timestamp: number;
+      dataset: string;
+      value: string;
+    }
+
+    const all_analysis_encrypted_data_points: QueryResult[] = await fetch(`${process.env.OBELISK_ENDPOINT}/data/query/events`, {
+      method: "POST",
+      body: JSON.stringify({
+        dataRange: {
+          datasets: Array.from(new Set(datasets)),
+          metrics: Array.from(new Set(metrics)),
+        },
+        fields: ["timestamp", "dataset", "metric", "value", "source"],
+        from: Math.min(...dataTimestamps.flat()),
+        to: Math.max(...dataTimestamps.flat()) + 1,
+      }),
+      headers: {
+        authorization: headers.authorization,
+        "Content-Type": "application/json",
+      },
+      signal: AbortSignal.timeout(10000),
+    })
+      .then((res) => {
+        return res.json()
+      })
+      .then((data) => {
+        return data.items.map((item: any) => {
+          return {
+            timestamp: item.timestamp,
+            dataset: item.dataset,
+            value: item.value.map.c.reduce(
+              (acc: string, byte: number) =>
+                acc + byte.toString(16).padStart(2, "0"),
+              "",
+            )
+          }
+        });
+      });
+
+    for (const [i, dataset] of datasets.entries()) {
+      const enc_data_points: string[] = [];
+
+      for (const timestamp of dataTimestamps[i]) {
+        enc_data_points.push(
+          all_analysis_encrypted_data_points.find(
+            point => point.dataset === dataset && point.timestamp === timestamp
+          )?.value || "undefined"
+        )
+      }
+
+      res_encrypted_data_points.push(enc_data_points);
     }
 
     return {
