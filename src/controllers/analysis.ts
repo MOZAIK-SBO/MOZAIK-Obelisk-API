@@ -551,10 +551,16 @@ analysisController.post(
       const enc_data_points: string[] = [];
 
       for (const timestamp of dataTimestamps[i]) {
+        const p = all_analysis_encrypted_data_points.find(
+          point => point.dataset === dataset && point.timestamp === timestamp
+        )?.value
+
+        if (p == undefined) {
+          throw new InternalServerError("Could not query data point.");
+        }
+
         enc_data_points.push(
-          all_analysis_encrypted_data_points.find(
-            point => point.dataset === dataset && point.timestamp === timestamp
-          )?.value || "undefined"
+          p
         )
       }
 
