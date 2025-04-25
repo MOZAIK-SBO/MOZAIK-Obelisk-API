@@ -154,7 +154,7 @@ dataController
                         data.batch_info_id
                       );
                     });
-                }, 1000);
+                }, 5000);
               }
 
             }
